@@ -1,0 +1,128 @@
+{
+  "id": "experience-processing",
+  "version": "3",
+  "rules": [
+    {
+      "path": "methodology/中心方法论.md",
+      "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+      "status": "published-v1.2"
+    },
+    {
+      "path": "methodology/按需细则.md",
+      "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+      "status": "published-v1.2"
+    }
+  ],
+  "description": "独立处理10–11；12在后续任务发生，原运行不等待。",
+  "nodes": {
+    "extract": {
+      "node": "experience.extract@1",
+      "logical": 10,
+      "input": {
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "item_id": {
+          "$ref": "input.item_id"
+        },
+        "owner": {
+          "$ref": "input.owner"
+        }
+      },
+      "output_contract": {
+        "value": {
+          "candidate": {
+            "type": "object",
+            "nonempty": true
+          },
+          "claim": {
+            "type": "object",
+            "nonempty": true
+          }
+        },
+        "no_value": {
+          "reason": {
+            "type": "string",
+            "nonempty": true
+          },
+          "closed_receipt": {
+            "type": "object",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "maintain": {
+      "node": "agent.reason@1",
+      "logical": 11,
+      "depends": [
+        "extract"
+      ],
+      "input": {
+        "purpose": "沿用提炼节点已取得的待办领取。核对来源、有效授权和现有能力，优先小幅维护已有记忆/Skill/工具；单次事实不包装为成熟方法。只在 input.authorization 明确覆盖时写入相应系统；缺权限或能力时保留可审阅候选并 waiting。完成实际维护、必要验证以及可发现的复用入口后，使用原 item_id/owner 通过 backlog close 结案并核对回执；输出 saved、verified_scope、reuse_entry、closed_receipt。保存、正式采用与后续实际复用分开报告，不等待未来使用，也不改原任务终态。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "item_id": {
+          "$ref": "input.item_id"
+        },
+        "owner": {
+          "$ref": "input.owner"
+        },
+        "candidate": {
+          "$ref": "steps.extract.output.candidate"
+        },
+        "claim": {
+          "$ref": "steps.extract.output.claim"
+        },
+        "authorization": {
+          "$ref": "input.authorization",
+          "default": null
+        }
+      },
+      "when": {
+        "extract": [
+          "value"
+        ]
+      },
+      "output_contract": {
+        "success": {
+          "saved": {
+            "type": "value",
+            "nonempty": true
+          },
+          "verified_scope": {
+            "type": "array",
+            "nonempty": true
+          },
+          "reuse_entry": {
+            "type": "value",
+            "nonempty": true
+          },
+          "closed_receipt": {
+            "type": "object",
+            "nonempty": true
+          }
+        }
+      }
+    }
+  }
+}

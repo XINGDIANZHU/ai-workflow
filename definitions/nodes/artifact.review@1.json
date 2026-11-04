@@ -1,0 +1,17 @@
+{
+  "id": "artifact.review",
+  "version": "1",
+  "kind": "agent",
+  "outcomes": [
+    "passed",
+    "repair",
+    "replan"
+  ],
+  "required_inputs": [
+    "artifacts",
+    "criteria"
+  ],
+  "cost": 0,
+  "bounded_cost": false,
+  "instruction": "读取 input.artifacts 指向的实际产物，按 input.criteria 验证；产物可以是文件引用、结构化答案或子运行的逐项输出。不得仅凭文件存在、执行成功、子代理自评或多数意见认定合格。已有证据仍适用时复用，只检查变化和具体疑点。需要集成时检查真实组合结果。若 input.rules 存在，核对其实际内容标识并读取适用部分。通过返回 passed，当前方案内有依据的具体修正可解决时返回 repair，需要改变方案或补充关键依据时返回 replan。原因不明、目标需用户决定或所需审阅能力不可用时报告 kind=waiting，不把未知当作任一终态。输出至少包含 verdict、evidence、defects、unverified、artifacts；检查绑定实际版本。对仅要求审阅的工作流，repair/replan 是审阅结论而非宣称产物已通过。"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "tasks.execute",
+  "version": "1",
+  "kind": "tasks",
+  "outcomes": [
+    "success",
+    "failed"
+  ],
+  "required_inputs": [
+    "tasks",
+    "phase",
+    "input"
+  ],
+  "cost": 0,
+  "bounded_cost": true,
+  "description": "由唯一 Restate 总控验证并展开固定规则内的异构任务 DAG。tasks 的每项已解析为完整节点契约；仅派发指定阶段，父子共享总预算及停止要求。success 表示子执行成功结束；failed 表示子执行已结束但有失败，携带真实逐项状态、错误、局部产物与证据供后继诊断，不代表通过验收。取消不转换为 failed 业务结果。"
+}

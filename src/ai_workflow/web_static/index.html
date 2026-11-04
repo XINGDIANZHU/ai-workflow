@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>序 · 流程工作台</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <aside class="sidebar" aria-label="工作台导航">
+    <a class="brand" href="#tasks" aria-label="序，流程工作台首页"><span class="brand-mark" aria-hidden="true">序</span><span>流程工作台<small>LOCAL WORKSPACE</small></span></a>
+    <div class="nav-caption">工作空间</div>
+    <nav>
+      <a href="#tasks" data-nav="tasks"><span class="nav-icon" aria-hidden="true">▤</span><span>任务</span><span id="task-count" class="nav-count">—</span></a>
+      <a href="#workflows" data-nav="workflows"><span class="nav-icon" aria-hidden="true">◇</span><span>流程库</span></a>
+      <a href="#backlog" data-nav="backlog"><span class="nav-icon" aria-hidden="true">▧</span><span>经验待办</span><span id="backlog-count" class="nav-count">—</span></a>
+    </nav>
+    <div class="sidebar-bottom"><span class="local-orbit" aria-hidden="true"></span><span>在本机工作<small>定义 · 执行 · 复用</small></span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="breadcrumb">个人工作空间<span>/</span><strong id="page-label">任务</strong></div>
+      <div class="top-actions"><span id="connection" class="connection pending" role="status"><i></i><span>正在连接</span></span><button type="button" id="refresh" class="button ghost" aria-label="刷新数据"><span aria-hidden="true">↻</span> 刷新</button><button type="button" id="new-run" class="button primary"><span aria-hidden="true">＋</span> 新建任务</button></div>
+    </header>
+    <div id="global-alert" class="global-alert" role="alert" hidden></div>
+    <main id="main" tabindex="-1"><div class="loading-state"><span class="spinner"></span><p>正在读取本地工作空间…</p></div></main>
+    <footer class="app-footer"><span>状态来自本地流程服务</span><span id="last-refresh">尚未同步</span></footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>

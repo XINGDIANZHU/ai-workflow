@@ -1,0 +1,9 @@
+* text=auto
+*.py text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.cmd text eol=crlf
+# Published rule hashes pin exact bytes, including original line endings.
+methodology/*.md -text

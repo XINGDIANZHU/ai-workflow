@@ -1,0 +1,16 @@
+{
+  "id": "comfy.operation",
+  "version": "1",
+  "kind": "comfyui",
+  "outcomes": [
+    "success"
+  ],
+  "required_inputs": [
+    "url",
+    "workflow",
+    "output_dir"
+  ],
+  "cost": 0,
+  "bounded_cost": true,
+  "description": "已有本地 ComfyUI 的一个已授权小型图片处理作业。输入是完整 API 请求；适配器登记身份、提交、查询、保存产物后报告，未知不盲重投。"
+}

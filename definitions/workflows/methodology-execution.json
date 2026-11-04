@@ -1,0 +1,1128 @@
+{
+  "id": "methodology-execution",
+  "version": "5",
+  "rules": [
+    {
+      "path": "methodology/中心方法论.md",
+      "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+      "status": "published-v1.2"
+    },
+    {
+      "path": "methodology/按需细则.md",
+      "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+      "status": "published-v1.2"
+    }
+  ],
+  "variables": {
+    "phase": 1
+  },
+  "description": "中心方法论 v1.2 正式应用；任务执行 1–9，两阶段执行与验收；经验处理独立推进。",
+  "nodes": {
+    "request": {
+      "node": "agent.reason@1",
+      "logical": 1,
+      "depends": [],
+      "input": {
+        "purpose": "接收并保留原始需求、来源、授权与启用依据；确认这是明确启用的任务。输出 request、source、authorization。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "request": {
+          "$ref": "input.request"
+        },
+        "source": {
+          "$ref": "input.source",
+          "default": null
+        },
+        "authorization": {
+          "$ref": "input.authorization",
+          "default": null
+        }
+      },
+      "output_contract": {
+        "success": {
+          "request": {
+            "type": "value",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "requirements": {
+      "node": "agent.reason@1",
+      "logical": 2,
+      "depends": [
+        "request"
+      ],
+      "input": {
+        "purpose": "核对目标、遗漏、矛盾及关键前提，形成可读需求文档（允许现有文件内章节）。输出 requirements、constraints、acceptance、documents。意图仍含糊先 waiting，不能自行删改目标。 documents 必须引用实际存在且可读取的本地文档（可含章节锚点），可用字符串路径或 {path,title}；提交时总控归档并传递固定版本。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "request": {
+          "$ref": "steps.request.output"
+        }
+      },
+      "output_contract": {
+        "success": {
+          "requirements": {
+            "type": "value",
+            "nonempty": true
+          },
+          "constraints": {
+            "type": "array"
+          },
+          "acceptance": {
+            "type": "value",
+            "nonempty": true
+          },
+          "documents": {
+            "type": "array",
+            "nonempty": true
+          }
+        }
+      },
+      "artifact_fields": [
+        "documents"
+      ]
+    },
+    "prepare": {
+      "node": "agent.reason@1",
+      "logical": 3,
+      "depends": [
+        "requirements"
+      ],
+      "input": {
+        "purpose": "针对生成方案的真实未知准备依据与能力，适量检索/试验后停止；查找已有成果及停用范围。输出 evidence、capabilities、reuse（可发现入口与此次使用依据），把真实使用/反证反馈原记录。previous_plan 为最近已形成方案及其稳定身份，首次为 null；结合 last_failure 判断需要补充的依据，不猜测全局历史。已有失败保留，不清空预算或计数。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        },
+        "previous_plan": {
+          "$ref": "vars.previous_plan",
+          "default": null
+        },
+        "last_failure": {
+          "$ref": "vars.last_failure",
+          "default": null
+        },
+        "reuse_sources": {
+          "$ref": "input.reuse_sources",
+          "default": []
+        }
+      },
+      "output_contract": {
+        "success": {
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "capabilities": {
+            "type": "array"
+          },
+          "reuse": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    "design": {
+      "node": "agent.reason@1",
+      "logical": 4,
+      "depends": [
+        "requirements",
+        "prepare"
+      ],
+      "input": {
+        "purpose": "形成可读设计和执行方案，明确两阶段目标、依赖、取舍和验证。输出 plan、stage1:{goal,criteria}、stage2:{goal,criteria}、documents；不要求一项内容一个文件。同时输出稳定 plan_id，代表实质方案。previous_plan 为最近已形成方案及其身份，首次为 null；结合 last_failure 与新依据比较原机制。仅补证、改名、排版、换执行者或重复尝试必须沿用原 plan_id；确有新依据和实质机制变化时才新建方案身份，并在方案文档说明区别。仅凭局部交接即可核对前方案，保留旧失败和总预算。 documents 必须引用实际存在且可读取的本地文档（可含章节锚点），可用字符串路径或 {path,title}；提交时总控归档并传递固定版本。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        },
+        "evidence": {
+          "$ref": "steps.prepare.output"
+        },
+        "previous_plan": {
+          "$ref": "vars.previous_plan",
+          "default": null
+        },
+        "last_failure": {
+          "$ref": "vars.last_failure",
+          "default": null
+        }
+      },
+      "routes": {
+        "success": {
+          "reset": [
+            "evaluate"
+          ],
+          "set": {
+            "previous_plan": {
+              "$ref": "steps.design.output"
+            },
+            "phase": 1
+          },
+          "max_rounds": null
+        }
+      },
+      "output_contract": {
+        "success": {
+          "plan_id": {
+            "type": "string",
+            "nonempty": true
+          },
+          "plan": {
+            "type": "value",
+            "nonempty": true
+          },
+          "stage1.criteria": {
+            "type": "value",
+            "nonempty": true
+          },
+          "stage2.criteria": {
+            "type": "value",
+            "nonempty": true
+          },
+          "documents": {
+            "type": "array",
+            "nonempty": true
+          }
+        }
+      },
+      "artifact_fields": [
+        "documents"
+      ]
+    },
+    "evaluate": {
+      "node": "agent.evaluate@1",
+      "logical": 5,
+      "depends": [
+        "requirements",
+        "design"
+      ],
+      "input": {
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "plan": {
+          "$ref": "steps.design.output"
+        },
+        "constraints": {
+          "$ref": "steps.requirements.output"
+        },
+        "last_failure": {
+          "$ref": "vars.last_failure",
+          "default": null
+        }
+      },
+      "routes": {
+        "replan": {
+          "reset": [
+            "prepare"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.evaluate.output"
+            },
+            "phase": 1
+          },
+          "max_rounds": null
+        }
+      },
+      "output_contract": {
+        "passed": {
+          "assessment": {
+            "type": "value",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          }
+        },
+        "replan": {
+          "reason": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "plan": {
+      "node": "agent.reason@1",
+      "logical": 6,
+      "depends": [
+        "requirements",
+        "prepare",
+        "design",
+        "evaluate"
+      ],
+      "input": {
+        "purpose": "形成可读且可执行的有序清单。输出 phase1_tasks、phase2_tasks（非空对象，稳定条目ID）、documents。每项必须是已登记能力的完整已解析节点 JSON：kind、version='1'、input、depends、phase、outcomes、资源/消耗上限、instruction（Agent）、验收要求/产物；不得仅输出自然语言或未解析 node 引用。阶段内可混用 agent/program/comfyui 并显式依赖、无环。第一阶段条目 phase=1，第二阶段 phase=2；各子图依赖仅指本子图，跨阶段已接受结果从 input.phase1 映射，不引用另一子运行节点。子任务 input.context 是父任务交付上下文。保留唯一写入职责及必要委派信息，子代理不可用如实说明。 documents 必须引用实际存在且可读取的本地文档（可含章节锚点），可用字符串路径或 {path,title}；提交时总控归档并传递固定版本。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        },
+        "plan": {
+          "$ref": "steps.design.output"
+        },
+        "capabilities": {
+          "$ref": "steps.prepare.output"
+        }
+      },
+      "when": {
+        "evaluate": [
+          "passed"
+        ]
+      },
+      "output_contract": {
+        "success": {
+          "phase1_tasks": {
+            "type": "object",
+            "nonempty": true
+          },
+          "phase2_tasks": {
+            "type": "object",
+            "nonempty": true
+          },
+          "documents": {
+            "type": "array",
+            "nonempty": true
+          }
+        }
+      },
+      "artifact_fields": [
+        "documents"
+      ]
+    },
+    "execute_phase1": {
+      "node": "tasks.execute@1",
+      "logical": 7,
+      "depends": [
+        "request",
+        "requirements",
+        "design",
+        "plan"
+      ],
+      "input": {
+        "tasks": {
+          "$ref": "steps.plan.output.phase1_tasks"
+        },
+        "phase": 1,
+        "input": {
+          "context": {
+            "request": {
+              "$ref": "steps.request.output"
+            },
+            "requirements": {
+              "$ref": "steps.requirements.output"
+            },
+            "plan": {
+              "$ref": "steps.design.output"
+            },
+            "rules": [
+              {
+                "path": "methodology/中心方法论.md",
+                "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+                "status": "published-v1.2"
+              },
+              {
+                "path": "methodology/按需细则.md",
+                "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+                "status": "published-v1.2"
+              }
+            ]
+          }
+        }
+      },
+      "routes": {
+        "success": {
+          "reset": [
+            "verify_phase1"
+          ],
+          "set": {
+            "phase1_artifacts": {
+              "$ref": "steps.execute_phase1.output"
+            }
+          },
+          "max_rounds": null
+        },
+        "failed": {
+          "reset": [
+            "verify_phase1"
+          ],
+          "set": {
+            "phase1_artifacts": {
+              "$ref": "steps.execute_phase1.output"
+            }
+          },
+          "max_rounds": null
+        }
+      }
+    },
+    "verify_phase1": {
+      "node": "artifact.review@1",
+      "logical": 8,
+      "depends": [
+        "design",
+        "execute_phase1"
+      ],
+      "input": {
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "artifacts": {
+          "$ref": "vars.phase1_artifacts",
+          "default": {
+            "$ref": "steps.execute_phase1.output"
+          }
+        },
+        "criteria": {
+          "$ref": "steps.design.output.stage1.criteria"
+        },
+        "stage": 1,
+        "plan_id": {
+          "$ref": "steps.design.output.plan_id"
+        },
+        "last_failure": {
+          "$ref": "vars.last_failure",
+          "default": null
+        },
+        "rework_rule": "返回 repair 时输出稳定 issue_id，同一根因在同一方案或不同阶段沿用身份，不因改名或换执行者重置；真正独立的问题才使用不同身份，并以 defects/evidence 说明。"
+      },
+      "routes": {
+        "repair": {
+          "reset": [
+            "repair_phase1"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.verify_phase1.output"
+            }
+          },
+          "max_rounds": 3,
+          "counter_key": {
+            "group": "local-rework",
+            "plan": {
+              "$ref": "steps.design.output.plan_id"
+            },
+            "problem": {
+              "$ref": "steps.verify_phase1.output.issue_id"
+            }
+          },
+          "on_limit": {
+            "reset": [
+              "prepare"
+            ],
+            "set": {
+              "last_failure": {
+                "$ref": "steps.verify_phase1.output"
+              },
+              "phase": 1
+            }
+          }
+        },
+        "replan": {
+          "reset": [
+            "prepare"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.verify_phase1.output"
+            },
+            "phase": 1
+          },
+          "max_rounds": null
+        },
+        "passed": {
+          "reset": [
+            "execute_phase2"
+          ],
+          "set": {
+            "phase": 2
+          },
+          "max_rounds": null
+        }
+      },
+      "output_contract": {
+        "passed": {
+          "verdict": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "defects": {
+            "type": "array"
+          },
+          "unverified": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          }
+        },
+        "repair": {
+          "verdict": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "defects": {
+            "type": "array"
+          },
+          "unverified": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "issue_id": {
+            "type": "string",
+            "nonempty": true
+          }
+        },
+        "replan": {
+          "verdict": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "defects": {
+            "type": "array"
+          },
+          "unverified": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "reason": {
+            "type": "string",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "repair_phase1": {
+      "node": "agent.repair@1",
+      "logical": 9,
+      "depends": [
+        "requirements",
+        "design",
+        "verify_phase1"
+      ],
+      "input": {
+        "purpose": "从目标、约束和已知事实追查最核心原因；只做有依据的最小修正，保护不受影响成果。修正后输出 artifacts（完整的当前成果引用及已修改版本）、changes、evidence；由后继审阅复验，不能自评代替验收。已知当前方案内无可行修正时返回 replan 及依据；需要改用户目标或原因未知时 waiting。不得通过改名、换代理或新运行清空同问题历史。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "artifacts": {
+          "$ref": "vars.phase1_artifacts"
+        },
+        "failure": {
+          "$ref": "steps.verify_phase1.output"
+        },
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        },
+        "plan": {
+          "$ref": "steps.design.output"
+        }
+      },
+      "when": {
+        "verify_phase1": [
+          "repair"
+        ]
+      },
+      "routes": {
+        "replan": {
+          "reset": [
+            "prepare"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.repair_phase1.output"
+            },
+            "phase": 1
+          },
+          "max_rounds": null
+        },
+        "success": {
+          "reset": [
+            "verify_phase1"
+          ],
+          "set": {
+            "phase1_artifacts": {
+              "$ref": "steps.repair_phase1.output.artifacts"
+            }
+          },
+          "max_rounds": null
+        }
+      },
+      "output_contract": {
+        "success": {
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "changes": {
+            "type": "value",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          }
+        },
+        "replan": {
+          "reason": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "execute_phase2": {
+      "node": "tasks.execute@1",
+      "logical": 7,
+      "depends": [
+        "request",
+        "requirements",
+        "design",
+        "plan",
+        "execute_phase1",
+        "verify_phase1"
+      ],
+      "input": {
+        "tasks": {
+          "$ref": "steps.plan.output.phase2_tasks"
+        },
+        "phase": 2,
+        "input": {
+          "context": {
+            "request": {
+              "$ref": "steps.request.output"
+            },
+            "requirements": {
+              "$ref": "steps.requirements.output"
+            },
+            "plan": {
+              "$ref": "steps.design.output"
+            },
+            "rules": [
+              {
+                "path": "methodology/中心方法论.md",
+                "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+                "status": "published-v1.2"
+              },
+              {
+                "path": "methodology/按需细则.md",
+                "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+                "status": "published-v1.2"
+              }
+            ]
+          },
+          "phase1": {
+            "$ref": "vars.phase1_artifacts"
+          }
+        }
+      },
+      "routes": {
+        "success": {
+          "reset": [
+            "verify_phase2"
+          ],
+          "set": {
+            "phase2_artifacts": {
+              "$ref": "steps.execute_phase2.output"
+            }
+          },
+          "max_rounds": null
+        },
+        "failed": {
+          "reset": [
+            "verify_phase2"
+          ],
+          "set": {
+            "phase2_artifacts": {
+              "$ref": "steps.execute_phase2.output"
+            }
+          },
+          "max_rounds": null
+        }
+      },
+      "when": {
+        "verify_phase1": [
+          "passed"
+        ]
+      }
+    },
+    "verify_phase2": {
+      "node": "artifact.review@1",
+      "logical": 8,
+      "depends": [
+        "requirements",
+        "design",
+        "execute_phase2"
+      ],
+      "input": {
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "artifacts": {
+          "phase1": {
+            "$ref": "vars.phase1_artifacts"
+          },
+          "phase2": {
+            "$ref": "vars.phase2_artifacts"
+          }
+        },
+        "criteria": {
+          "stage2": {
+            "$ref": "steps.design.output.stage2.criteria"
+          },
+          "acceptance": {
+            "$ref": "steps.requirements.output.acceptance"
+          }
+        },
+        "stage": 2,
+        "plan_id": {
+          "$ref": "steps.design.output.plan_id"
+        },
+        "last_failure": {
+          "$ref": "vars.last_failure",
+          "default": null
+        },
+        "rework_rule": "返回 repair 时输出稳定 issue_id，同一根因在同一方案或不同阶段沿用身份，不因改名或换执行者重置；真正独立的问题才使用不同身份，并以 defects/evidence 说明。",
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        }
+      },
+      "routes": {
+        "repair": {
+          "reset": [
+            "repair_phase2"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.verify_phase2.output"
+            }
+          },
+          "max_rounds": 3,
+          "counter_key": {
+            "group": "local-rework",
+            "plan": {
+              "$ref": "steps.design.output.plan_id"
+            },
+            "problem": {
+              "$ref": "steps.verify_phase2.output.issue_id"
+            }
+          },
+          "on_limit": {
+            "reset": [
+              "prepare"
+            ],
+            "set": {
+              "last_failure": {
+                "$ref": "steps.verify_phase2.output"
+              },
+              "phase": 1
+            }
+          }
+        },
+        "replan": {
+          "reset": [
+            "prepare"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.verify_phase2.output"
+            },
+            "phase": 1
+          },
+          "max_rounds": null
+        }
+      },
+      "output_contract": {
+        "passed": {
+          "verdict": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "defects": {
+            "type": "array"
+          },
+          "unverified": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "artifacts.phase1": {
+            "type": "value",
+            "nonempty": true
+          },
+          "artifacts.phase2": {
+            "type": "value",
+            "nonempty": true
+          }
+        },
+        "repair": {
+          "verdict": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "defects": {
+            "type": "array"
+          },
+          "unverified": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "issue_id": {
+            "type": "string",
+            "nonempty": true
+          },
+          "artifacts.phase1": {
+            "type": "value",
+            "nonempty": true
+          },
+          "artifacts.phase2": {
+            "type": "value",
+            "nonempty": true
+          }
+        },
+        "replan": {
+          "verdict": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "defects": {
+            "type": "array"
+          },
+          "unverified": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "reason": {
+            "type": "string",
+            "nonempty": true
+          },
+          "artifacts.phase1": {
+            "type": "value",
+            "nonempty": true
+          },
+          "artifacts.phase2": {
+            "type": "value",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "repair_phase2": {
+      "node": "agent.repair@1",
+      "logical": 9,
+      "depends": [
+        "requirements",
+        "design",
+        "verify_phase2"
+      ],
+      "input": {
+        "purpose": "从目标、约束和已知事实追查最核心原因；只做有依据的最小修正，保护不受影响成果。修正后输出 artifacts（完整的当前成果引用及已修改版本）、changes、evidence；由后继审阅复验，不能自评代替验收。已知当前方案内无可行修正时返回 replan 及依据；需要改用户目标或原因未知时 waiting。不得通过改名、换代理或新运行清空同问题历史。 当前 artifacts 为 {phase1,phase2} 全量成果包。修正后返回同形的完整 artifacts，保留未改动成果；若第二阶段替换第一阶段同一产物，明确新旧版本关系，最终验证覆盖全部有效需求。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "artifacts": {
+          "phase1": {
+            "$ref": "vars.phase1_artifacts"
+          },
+          "phase2": {
+            "$ref": "vars.phase2_artifacts"
+          }
+        },
+        "failure": {
+          "$ref": "steps.verify_phase2.output"
+        },
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        },
+        "plan": {
+          "$ref": "steps.design.output"
+        }
+      },
+      "when": {
+        "verify_phase2": [
+          "repair"
+        ]
+      },
+      "routes": {
+        "replan": {
+          "reset": [
+            "prepare"
+          ],
+          "set": {
+            "last_failure": {
+              "$ref": "steps.repair_phase2.output"
+            },
+            "phase": 1
+          },
+          "max_rounds": null
+        },
+        "success": {
+          "reset": [
+            "verify_phase2"
+          ],
+          "set": {
+            "phase1_artifacts": {
+              "$ref": "steps.repair_phase2.output.artifacts.phase1"
+            },
+            "phase2_artifacts": {
+              "$ref": "steps.repair_phase2.output.artifacts.phase2"
+            }
+          },
+          "max_rounds": null
+        }
+      },
+      "output_contract": {
+        "success": {
+          "artifacts": {
+            "type": "value",
+            "nonempty": true
+          },
+          "changes": {
+            "type": "value",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          },
+          "artifacts.phase1": {
+            "type": "value",
+            "nonempty": true
+          },
+          "artifacts.phase2": {
+            "type": "value",
+            "nonempty": true
+          }
+        },
+        "replan": {
+          "reason": {
+            "type": "string",
+            "nonempty": true
+          },
+          "evidence": {
+            "type": "array",
+            "nonempty": true
+          }
+        }
+      }
+    },
+    "deliver": {
+      "node": "agent.reason@1",
+      "logical": 8,
+      "depends": [
+        "requirements",
+        "verify_phase2"
+      ],
+      "input": {
+        "purpose": "第二阶段已通过后交付成果，并核对本任务必要子任务、验证、在途执行、临时资源及待办交接；未处置操作或阻塞当前验收的问题不能报成功。有价值且不阻塞验收的发现通过 discoveries 交接，无价值不新增待办。输出 deliverables、verification、cleanup、discoveries_refs。原任务不等待经验处理或未来复用。 artifacts 已包含两个阶段，交付须列出完整当前成果及替换关系。cleanup 包含 children、pending_external_operations、temporary_resources；discoveries_refs 没有值得沉淀的信息时为空数组。",
+        "rules": [
+          {
+            "path": "methodology/中心方法论.md",
+            "sha256": "D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B",
+            "status": "published-v1.2"
+          },
+          {
+            "path": "methodology/按需细则.md",
+            "sha256": "D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9",
+            "status": "published-v1.2"
+          }
+        ],
+        "artifacts": {
+          "phase1": {
+            "$ref": "vars.phase1_artifacts"
+          },
+          "phase2": {
+            "$ref": "vars.phase2_artifacts"
+          }
+        },
+        "verification": {
+          "$ref": "steps.verify_phase2.output"
+        },
+        "requirements": {
+          "$ref": "steps.requirements.output"
+        }
+      },
+      "when": {
+        "verify_phase2": [
+          "passed"
+        ]
+      },
+      "output_contract": {
+        "success": {
+          "deliverables": {
+            "type": "value",
+            "nonempty": true
+          },
+          "verification": {
+            "type": "object",
+            "nonempty": true
+          },
+          "cleanup": {
+            "type": "object",
+            "nonempty": true
+          },
+          "cleanup.children": {
+            "type": "object"
+          },
+          "cleanup.pending_external_operations": {
+            "type": "array"
+          },
+          "cleanup.temporary_resources": {
+            "type": "value",
+            "nonempty": true
+          },
+          "discoveries_refs": {
+            "type": "array"
+          }
+        }
+      }
+    }
+  }
+}

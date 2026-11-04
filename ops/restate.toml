@@ -1,0 +1,28 @@
+# Independent, empty single-node instance. Do not point this at an old data directory.
+cluster-name = "portable-workflow-local"
+node-name = "portable-workflow-node-1"
+auto-provision = true
+default-num-partitions = 4
+default-replication = 1
+listen-mode = "tcp"
+bind-ip = "127.0.0.1"
+bind-port = 25122
+advertised-host = "127.0.0.1"
+disable-telemetry = true
+log-format = "json"
+log-disable-ansi-codes = true
+rocksdb-total-memory-size = "512 MiB"
+default-journal-retention = "7d"
+default-idempotency-retention = "7d"
+default-workflow-completion-retention = "7d"
+
+[admin]
+bind-address = "127.0.0.1:29070"
+advertised-address = "http://127.0.0.1:29070/"
+
+[ingress]
+bind-address = "127.0.0.1:28080"
+advertised-address = "http://127.0.0.1:28080/"
+
+[worker.invoker]
+memory-limit = "256 MiB"

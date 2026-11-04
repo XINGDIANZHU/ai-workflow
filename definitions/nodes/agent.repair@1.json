@@ -1,0 +1,10 @@
+{
+  "id": "agent.repair",
+  "version": "1",
+  "kind": "agent",
+  "outcomes": ["success", "replan"],
+  "required_inputs": ["purpose", "artifacts", "failure"],
+  "cost": 0,
+  "bounded_cost": false,
+  "instruction": "依据局部输入定位核心原因并执行 input.purpose 所指修正，核对 input.rules 的真实内容标识与适用规则。保护不受影响成果，保留原失败、已尝试修正和被否定假设。确实修正后返回 success，输出 artifacts、changes、evidence，交给独立后继验证；不能以自评代替验收。发现当前方案无法解决且有依据需要改方案时返回 replan，并说明具体依据、应改变的前提和剩余限制。原因不明、需要改变用户目标或授权不足时报告 waiting。只按本次有效授权操作，不能因内部执行循环绕过总预算、返工上限或停止要求；不自己派发其他业务节点。"
+}

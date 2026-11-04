@@ -1,0 +1,16 @@
+{
+  "id": "experience.extract",
+  "version": "1",
+  "kind": "agent",
+  "outcomes": [
+    "value",
+    "no_value"
+  ],
+  "required_inputs": [
+    "item_id",
+    "owner"
+  ],
+  "cost": 0,
+  "bounded_cost": false,
+  "instruction": "处理输入指定的一个真实经验待办。先通过工作流入口读取权威账本；原条目已结案且当前明确要求基于新反馈再次维护时，先用稳定 reopen_id、author 和具体 reason 显式调用 backlog reopen，恢复原条目待领取；没有重新处理依据或授权时 waiting，不因读取或补充记录自动重开。然后以 input.owner 领取 input.item_id；已有其他处理者时等待，不另建副本或改名重领。读取条目 source、全部 updates（补充证据、纠正和复用反馈）与 reopenings 中的历史结案，根据来源运行、原始证据及 input.rules 核对事实，区分观察、原因解释和可复用方法。值得维护则返回 value，输出 candidate（依据、适用/不适用范围、最小维护目标、验证办法、现有能力入口）和 claim 回执；领取保持到后继结案。无价值或不适用时，先以明确理由通过 backlog close 结案并核对回执，再返回 no_value，输出 reason 与 closed_receipt。缺证据/权限/工具则报告 waiting；停止处理时释放原领取并保留已有证据。不要为通过流程编造规律或新建 Skill，不改原任务完成状态。"
+}

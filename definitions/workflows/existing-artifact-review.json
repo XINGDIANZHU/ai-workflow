@@ -1,0 +1,18 @@
+{
+  "id": "existing-artifact-review",
+  "version": "1",
+  "description": "用户已有产物直接进入同一artifact.review@1；运行完成不把repair/replan结论改成产物通过。",
+  "nodes": {
+    "review": {
+      "node": "artifact.review@1",
+      "input": {
+        "artifacts": {
+          "$ref": "input.artifacts"
+        },
+        "criteria": {
+          "$ref": "input.criteria"
+        }
+      }
+    }
+  }
+}

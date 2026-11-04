@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "personal-ai-workflow"
+version = "0.1.0"
+description = "Personal workflows with one Restate authority and replaceable executors"
+requires-python = ">=3.11"
+dependencies = ["httpx==0.28.1", "mcp==1.30.0"]
+
+[project.optional-dependencies]
+server = ["restate-sdk[serde]==1.2.0", "hypercorn==0.18.0"]
+test = ["pytest==9.2.0"]
+
+[project.scripts]
+ai-workflow = "ai_workflow.client:main"
+ai-workflow-mcp = "ai_workflow.mcp_server:main"
+ai-workflow-web = "ai_workflow.web:main"
+
+[tool.setuptools.package-data]
+ai_workflow = ["web_static/*"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
