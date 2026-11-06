@@ -1,0 +1,594 @@
+{
+  "id": "agent.repair-final",
+  "version": "1",
+  "kind": "agent",
+  "outcomes": [
+    "success",
+    "replan"
+  ],
+  "required_inputs": [
+    "artifacts",
+    "failure",
+    "requirements",
+    "plan"
+  ],
+  "cost": 0,
+  "bounded_cost": false,
+  "instruction": "依据局部输入定位核心原因并执行 本节点规定的职责 所指修正，核对 input.rules 的真实内容标识与适用规则。保护不受影响成果，保留原失败、已尝试修正和被否定假设。确实修正后返回 success，输出 artifacts、changes、evidence，交给独立后继验证；不能以自评代替验收。发现当前方案无法解决且有依据需要改方案时返回 replan，并说明具体依据、应改变的前提和剩余限制。原因不明、需要改变用户目标或授权不足时报告 waiting。只按本次有效授权操作，不能因内部执行循环绕过总预算、返工上限或停止要求；不自己派发其他业务节点。\n从目标、约束和已知事实追查最核心原因；只做有依据的最小修正，保护不受影响成果。修正后输出 artifacts（完整的当前成果引用及已修改版本）、changes、evidence；由后继审阅复验，不能自评代替验收。已知当前方案内无可行修正时返回 replan 及依据；需要改用户目标或原因未知时 waiting。不得通过改名、换代理或新运行清空同问题历史。 当前 artifacts 为 {phase1,phase2} 全量成果包。修正后返回同形的完整 artifacts，保留未改动成果；若第二阶段替换第一阶段同一产物，明确新旧版本关系，最终验证覆盖全部有效需求。",
+  "io_contract": {
+    "version": "1",
+    "input": {
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "phase1": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "成果路径或结构化答案的文字"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "非空文字说明或标识"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": true,
+                        "description": "结构化记录",
+                        "minProperties": 1
+                      }
+                    ],
+                    "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+                  },
+                  "minItems": 1,
+                  "description": "有序条目"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "当前成果：路径/答案文字、成果条目列表或具名成果包；引用必须绑定实际版本"
+            },
+            "phase2": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "成果路径或结构化答案的文字"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "非空文字说明或标识"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": true,
+                        "description": "结构化记录",
+                        "minProperties": 1
+                      }
+                    ],
+                    "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+                  },
+                  "minItems": 1,
+                  "description": "有序条目"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "当前成果：路径/答案文字、成果条目列表或具名成果包；引用必须绑定实际版本"
+            }
+          },
+          "required": [
+            "phase1",
+            "phase2"
+          ],
+          "additionalProperties": true,
+          "description": "本次需要处理或交接的实际成果、文件引用或具名成果包。"
+        },
+        "failure": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true,
+          "description": "待修复问题的失败结论、根因线索和证据。",
+          "minProperties": 1
+        },
+        "requirements": {
+          "type": "object",
+          "properties": {
+            "requirements": {
+              "type": "string",
+              "pattern": "\\S",
+              "description": "梳理后的需求正文或概要"
+            },
+            "constraints": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "非空文字说明或标识"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "结构化记录",
+                    "minProperties": 1
+                  }
+                ],
+                "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+              },
+              "minItems": 0,
+              "description": "有序条目"
+            },
+            "acceptance": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "可观察的验收条件"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "非空文字说明或标识"
+                  },
+                  "minItems": 1,
+                  "description": "有序条目"
+                }
+              ],
+              "description": "验收条件文字或非空条件列表"
+            },
+            "documents": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "可读文件的绝对路径"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "可读文件的绝对路径"
+                      },
+                      "title": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "非空文字说明或标识"
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": true,
+                    "description": "结构化记录"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "description": "可读成果文档引用；总控归档后补充 artifact_id、sha256 与 snapshot，不改变 path 含义"
+            }
+          },
+          "required": [
+            "requirements",
+            "constraints",
+            "acceptance",
+            "documents"
+          ],
+          "additionalProperties": true,
+          "description": "已梳理的需求；正文或包含约束、验收条件和文档的需求包。"
+        },
+        "plan": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "pattern": "\\S",
+              "description": "实质方案的稳定编号"
+            },
+            "plan": {
+              "type": "string",
+              "pattern": "\\S",
+              "description": "设计方案概要"
+            },
+            "execution_plan": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "按顺序描述执行步骤"
+              },
+              "minItems": 1,
+              "description": "有序条目"
+            },
+            "stage1": {
+              "type": "object",
+              "properties": {
+                "criteria": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "description": "可观察的验收条件"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "非空文字说明或标识"
+                      },
+                      "minItems": 1,
+                      "description": "有序条目"
+                    }
+                  ],
+                  "description": "验收条件文字或非空条件列表"
+                }
+              },
+              "required": [
+                "criteria"
+              ],
+              "additionalProperties": true,
+              "description": "结构化记录"
+            },
+            "stage2": {
+              "type": "object",
+              "properties": {
+                "criteria": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "description": "可观察的验收条件"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "非空文字说明或标识"
+                      },
+                      "minItems": 1,
+                      "description": "有序条目"
+                    }
+                  ],
+                  "description": "验收条件文字或非空条件列表"
+                }
+              },
+              "required": [
+                "criteria"
+              ],
+              "additionalProperties": true,
+              "description": "结构化记录"
+            },
+            "documents": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "可读文件的绝对路径"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "可读文件的绝对路径"
+                      },
+                      "title": {
+                        "type": "string",
+                        "pattern": "\\S",
+                        "description": "非空文字说明或标识"
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": true,
+                    "description": "结构化记录"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "description": "可读成果文档引用；总控归档后补充 artifact_id、sha256 与 snapshot，不改变 path 含义"
+            }
+          },
+          "required": [
+            "plan_id",
+            "plan",
+            "execution_plan",
+            "stage1",
+            "stage2",
+            "documents"
+          ],
+          "additionalProperties": true,
+          "description": "设计方案；按本节点声明的类型接收方案正文或完整方案包。"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "status": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": true,
+            "description": "结构化记录"
+          },
+          "minItems": 0,
+          "description": "需核对并读取的规则文件及内容哈希"
+        }
+      },
+      "required": [
+        "artifacts",
+        "failure",
+        "requirements",
+        "plan"
+      ],
+      "additionalProperties": false,
+      "description": "本节点的局部输入；不读取其他节点的隐含状态"
+    },
+    "outputs": {
+      "success": {
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "object",
+            "properties": {
+              "phase1": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "成果路径或结构化答案的文字"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "description": "非空文字说明或标识"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "required": [],
+                          "additionalProperties": true,
+                          "description": "结构化记录",
+                          "minProperties": 1
+                        }
+                      ],
+                      "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+                    },
+                    "minItems": 1,
+                    "description": "有序条目"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "结构化记录",
+                    "minProperties": 1
+                  }
+                ],
+                "description": "当前成果：路径/答案文字、成果条目列表或具名成果包；引用必须绑定实际版本"
+              },
+              "phase2": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "成果路径或结构化答案的文字"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "description": "非空文字说明或标识"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "required": [],
+                          "additionalProperties": true,
+                          "description": "结构化记录",
+                          "minProperties": 1
+                        }
+                      ],
+                      "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+                    },
+                    "minItems": 1,
+                    "description": "有序条目"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "结构化记录",
+                    "minProperties": 1
+                  }
+                ],
+                "description": "当前成果：路径/答案文字、成果条目列表或具名成果包；引用必须绑定实际版本"
+              }
+            },
+            "required": [
+              "phase1",
+              "phase2"
+            ],
+            "additionalProperties": true,
+            "description": "本次需要处理或交接的实际成果、文件引用或具名成果包。"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "description": "非空文字说明或标识"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {},
+                      "required": [],
+                      "additionalProperties": true,
+                      "description": "结构化记录",
+                      "minProperties": 1
+                    }
+                  ],
+                  "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+                },
+                "minItems": 1,
+                "description": "有序条目"
+              }
+            ],
+            "description": "已完成的修正及其对应问题。"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+            },
+            "minItems": 1,
+            "description": "支持判断的来源、实际观察和验证证据。"
+          }
+        },
+        "required": [
+          "artifacts",
+          "changes",
+          "evidence"
+        ],
+        "additionalProperties": true,
+        "description": "结构化记录"
+      },
+      "replan": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "作出本分支判断的原因及必要说明。"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+            },
+            "minItems": 1,
+            "description": "支持判断的来源、实际观察和验证证据。"
+          }
+        },
+        "required": [
+          "reason",
+          "evidence"
+        ],
+        "additionalProperties": true,
+        "description": "结构化记录"
+      }
+    }
+  },
+  "title": "完整成果返工",
+  "description": "修正最终验收发现的问题，保留第一、第二阶段的完整成果包。"
+}

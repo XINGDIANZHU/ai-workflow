@@ -56,6 +56,21 @@ def test_discovery_only_explicit_files_and_nested_outputs(tmp_path):
     assert items[0]["field"] == "steps.a.output.artifacts"
 
 
+def test_task_plan_paths_are_not_delivered_artifacts(tmp_path):
+    plan = tmp_path / "plan.md"
+    plan.write_text("Execute the declared tasks later.", encoding="utf-8")
+    task = {"kind": "program", "version": "1", "outcomes": ["success"],
+            "input": {"stdin": {"output_path": str(tmp_path / "future.md")}}}
+    payload = {**report(plan), "output": {"documents": [str(plan)],
+                                         "phase1_tasks": {"write": task}}}
+    captured = capture_report(tmp_path, "plan-run", payload, {"artifact_fields": ["documents"]})
+    assert len(captured["artifacts"]) == 1
+    assert captured["artifacts"][0]["path"] == str(plan)
+    assert captured["artifacts"][0]["status"] == "archived"
+    # Actual child outputs still produce receipts, independent of the node kind.
+    assert len(list(artifact_candidates({"steps": {"write": {"output": {"documents": [str(plan)]}}}}))) == 1
+
+
 def test_old_output_shape_kept_while_receipt_is_archived(tmp_path):
     source = tmp_path / "old.md"
     source.write_text("legacy contract", encoding="utf-8")

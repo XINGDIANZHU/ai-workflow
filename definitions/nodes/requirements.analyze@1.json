@@ -1,0 +1,188 @@
+{
+  "id": "requirements.analyze",
+  "version": "1",
+  "kind": "agent",
+  "outcomes": [
+    "success"
+  ],
+  "required_inputs": [
+    "request"
+  ],
+  "cost": 0,
+  "bounded_cost": false,
+  "instruction": "执行 本节点规定的职责，仅使用交付的局部输入和当前授权；不猜测前驱节点名称或全局最新文件。若 input.rules 存在，核对文件实际 SHA256 并读取本次必要规则；恢复时补读缺失内容。明确区分事实、假设、结果与未验证范围。需要用户意图、权限或改变判断的证据时发送 kind=waiting，说明问题、来源、答复映射和恢复条件，不能用 completed 结束未解决事项。必要成果保存为真实文件并返回绝对路径、类型、版本或内容标识；完成实际职责后才报告 success。收到 reply 后沿原 execution_id/attempt 接续，不复制执行。只读查询自身运行/账本以核对授权、预算、在途状态和已认领待办；不直接修改运行状态或派发后继。可将有依据且不阻塞当前验收的发现放入 discoveries，不强造经验或 Skill。默认会话内执行；后台唤起未提供。\n核对目标、遗漏、矛盾及关键前提，形成可读需求文档（允许现有文件内章节）。输出 requirements、constraints、acceptance、documents。意图仍含糊先 waiting，不能自行删改目标。 documents 必须引用实际存在且可读取的本地文档（可含章节锚点），可用字符串路径或 {path,title}；提交时总控归档并传递固定版本。",
+  "io_contract": {
+    "version": "1",
+    "input": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+            }
+          },
+          "required": [
+            "request"
+          ],
+          "additionalProperties": true,
+          "description": "用户的原始需求；可以是文字或具名需求记录。"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "status": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": true,
+            "description": "结构化记录"
+          },
+          "minItems": 0,
+          "description": "需核对并读取的规则文件及内容哈希"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "additionalProperties": false,
+      "description": "本节点的局部输入；不读取其他节点的隐含状态"
+    },
+    "outputs": {
+      "success": {
+        "type": "object",
+        "properties": {
+          "requirements": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "已梳理的需求；正文或包含约束、验收条件和文档的需求包。"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+            },
+            "minItems": 0,
+            "description": "需求约束、能力限制、环境条件或预算。"
+          },
+          "acceptance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "可观察的验收条件"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                "minItems": 1,
+                "description": "有序条目"
+              }
+            ],
+            "description": "完整需求的可观察验收条件。"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "可读文件的绝对路径"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "description": "可读文件的绝对路径"
+                    },
+                    "title": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "description": "非空文字说明或标识"
+                    }
+                  },
+                  "required": [
+                    "path"
+                  ],
+                  "additionalProperties": true,
+                  "description": "结构化记录"
+                }
+              ]
+            },
+            "minItems": 1,
+            "description": "真实可读的成果文档引用；归档后绑定固定内容版本。"
+          }
+        },
+        "required": [
+          "requirements",
+          "constraints",
+          "acceptance",
+          "documents"
+        ],
+        "additionalProperties": true,
+        "description": "需求、约束、验收条件和真实需求文档"
+      }
+    }
+  },
+  "artifact_fields": [
+    "documents"
+  ],
+  "title": "梳理需求",
+  "description": "澄清目标、约束与验收条件，检查矛盾和遗漏，形成可阅读的需求文档。"
+}

@@ -11,10 +11,8 @@ import json
 import math
 import re
 from typing import Any
-
-
-class ContractError(ValueError):
-    """A request does not satisfy the supported workflow contract."""
+from .interfaces import (InterfaceError as ContractError, validate_interface,
+                         validate_connections, validate_input, validate_result, validate_report)
 
 
 KINDS = frozenset({"agent", "program", "comfyui", "tasks", "subflow"})
@@ -145,6 +143,7 @@ def validate_output(node: dict, outcome: str, output: Any) -> None:
     Missing contracts/outcomes preserve the original unrestricted output shape.
     Dotted fields traverse JSON objects only; extra output fields are retained.
     """
+    validate_result(node, outcome, output)
     fields = _validate_output_contract(node, node.get("id", "node")).get(outcome, {})
     if not fields:
         return
@@ -196,7 +195,8 @@ def validate_workflow(workflow: dict) -> dict:
             raise ContractError(f"node {node_id} must be an object")
         if node.get("kind") not in KINDS:
             raise ContractError(f"node {node_id}: unsupported kind {node.get('kind')!r}")
-        if node.get("version") != "1":
+        if (node.get("version") != "1" and ("io_contract" not in node
+                or not isinstance(node.get("version"), str) or not re.fullmatch(r"[1-9][0-9]*", node["version"]))):
             raise ContractError(f"node {node_id}: unsupported version {node.get('version')!r}")
         node.setdefault("input", {})
         _strings(node.get("artifact_fields", []), f"{node_id}.artifact_fields")
@@ -206,6 +206,8 @@ def validate_workflow(workflow: dict) -> dict:
         if "skipped" in node["outcomes"]:
             raise ContractError("skipped is a reserved dependency status")
         _validate_output_contract(node, node_id)
+        _strings(node.get("required_inputs", []), f"{node_id}.required_inputs")
+        validate_interface(node, node_id)
         cost = node.setdefault("cost", 0)
         if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
             raise ContractError(f"{node_id}.cost must be finite and nonnegative")
@@ -282,5 +284,5 @@ def validate_workflow(workflow: dict) -> dict:
         for ref in references(node["input"]):
             if ref.startswith("steps.") and ref.split(".")[1] not in allowed:
                 raise ContractError(f"{node_id}: input reference requires a dependency: {ref}")
-        _strings(node.get("required_inputs", []), f"{node_id}.required_inputs")
+    validate_connections(result)
     return result

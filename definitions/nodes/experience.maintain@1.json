@@ -1,0 +1,282 @@
+{
+  "id": "experience.maintain",
+  "version": "1",
+  "kind": "agent",
+  "outcomes": [
+    "success"
+  ],
+  "required_inputs": [
+    "item_id",
+    "owner",
+    "candidate",
+    "claim"
+  ],
+  "cost": 0,
+  "bounded_cost": false,
+  "instruction": "执行 本节点规定的职责，仅使用交付的局部输入和当前授权；不猜测前驱节点名称或全局最新文件。若 input.rules 存在，核对文件实际 SHA256 并读取本次必要规则；恢复时补读缺失内容。明确区分事实、假设、结果与未验证范围。需要用户意图、权限或改变判断的证据时发送 kind=waiting，说明问题、来源、答复映射和恢复条件，不能用 completed 结束未解决事项。必要成果保存为真实文件并返回绝对路径、类型、版本或内容标识；完成实际职责后才报告 success。收到 reply 后沿原 execution_id/attempt 接续，不复制执行。只读查询自身运行/账本以核对授权、预算、在途状态和已认领待办；不直接修改运行状态或派发后继。可将有依据且不阻塞当前验收的发现放入 discoveries，不强造经验或 Skill。默认会话内执行；后台唤起未提供。\n沿用提炼节点已取得的待办领取。核对来源、有效授权和现有能力，优先小幅维护已有记忆/Skill/工具；单次事实不包装为成熟方法。只在 input.authorization 明确覆盖时写入相应系统；缺权限或能力时保留可审阅候选并 waiting。完成实际维护、必要验证以及可发现的复用入口后，使用原 item_id/owner 通过 backlog close 结案并核对回执；输出 saved、verified_scope、reuse_entry、closed_receipt。保存、正式采用与后续实际复用分开报告，不等待未来使用，也不改原任务终态。",
+  "io_contract": {
+    "version": "1",
+    "input": {
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "经验待办的稳定编号。"
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "本次待办处理者的身份。"
+        },
+        "candidate": {
+          "type": "object",
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "非空文字说明或标识"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "结构化记录",
+                    "minProperties": 1
+                  }
+                ],
+                "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+              },
+              "minItems": 1,
+              "description": "依据、来源与实际观察；可用文字说明或具名记录"
+            },
+            "scope": {
+              "type": "string",
+              "pattern": "\\S",
+              "description": "非空文字说明或标识"
+            },
+            "exclusions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "minItems": 0,
+              "description": "有序条目"
+            },
+            "maintenance_goal": {
+              "type": "string",
+              "pattern": "\\S",
+              "description": "非空文字说明或标识"
+            },
+            "validation": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "可观察的验收条件"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "非空文字说明或标识"
+                  },
+                  "minItems": 1,
+                  "description": "有序条目"
+                }
+              ],
+              "description": "验收条件文字或非空条件列表"
+            },
+            "existing_entry": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "evidence",
+            "scope",
+            "exclusions",
+            "maintenance_goal",
+            "validation",
+            "existing_entry"
+          ],
+          "additionalProperties": true,
+          "description": "待验证、待保存的候选经验及成立条件。"
+        },
+        "claim": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true,
+          "description": "待办领取回执，用于确认当前处理身份。",
+          "minProperties": 1
+        },
+        "authorization": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "本次任务获准执行的范围、权限或用户约定。"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "status": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": true,
+            "description": "结构化记录"
+          },
+          "minItems": 0,
+          "description": "需核对并读取的规则文件及内容哈希"
+        }
+      },
+      "required": [
+        "item_id",
+        "owner",
+        "candidate",
+        "claim"
+      ],
+      "additionalProperties": false,
+      "description": "本节点的局部输入；不读取其他节点的隐含状态"
+    },
+    "outputs": {
+      "success": {
+        "type": "object",
+        "properties": {
+          "saved": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": true,
+                "description": "结构化记录",
+                "minProperties": 1
+              }
+            ],
+            "description": "已保存的经验或能力及其位置。"
+          },
+          "verified_scope": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true,
+                  "description": "结构化记录",
+                  "minProperties": 1
+                }
+              ],
+              "description": "文字说明或具名的结构化内容；其业务真实性由执行者核验"
+            },
+            "minItems": 1,
+            "description": "经过实际验证的适用范围。"
+          },
+          "reuse_entry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": true,
+                "description": "结构化记录",
+                "minProperties": 1
+              }
+            ],
+            "description": "下一次任务可检索或调用的复用入口。"
+          },
+          "closed_receipt": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true,
+            "description": "经验待办的结案回执。",
+            "minProperties": 1
+          }
+        },
+        "required": [
+          "saved",
+          "verified_scope",
+          "reuse_entry",
+          "closed_receipt"
+        ],
+        "additionalProperties": true,
+        "description": "结构化记录"
+      }
+    }
+  },
+  "title": "沉淀与维护",
+  "description": "验证提炼出的经验，保存获授权的复用入口，并带证据完成待办。"
+}

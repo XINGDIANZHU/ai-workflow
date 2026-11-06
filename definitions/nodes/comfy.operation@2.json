@@ -1,0 +1,146 @@
+{
+  "id": "comfy.operation",
+  "version": "2",
+  "kind": "comfyui",
+  "outcomes": [
+    "success"
+  ],
+  "required_inputs": [
+    "url",
+    "workflow",
+    "output_dir"
+  ],
+  "cost": 0,
+  "bounded_cost": true,
+  "description": "把已有 ComfyUI 工作流交给指定实例，等待作业完成并返回产物文件。",
+  "io_contract": {
+    "version": "1",
+    "input": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^/@\\s]+(?::[0-9]+)?(?:/[^\\s]*)?$",
+          "description": "目标 ComfyUI 实例的服务地址。"
+        },
+        "workflow": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "class_type": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "inputs": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": true,
+                "description": "结构化记录"
+              }
+            },
+            "required": [
+              "class_type",
+              "inputs"
+            ],
+            "additionalProperties": true,
+            "description": "结构化记录"
+          },
+          "description": "可提交给 ComfyUI 的 API 格式工作流。",
+          "minProperties": 1
+        },
+        "output_dir": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "产物保存目录，必须是执行环境可访问的绝对路径。"
+        },
+        "client_id": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "ComfyUI 客户端标识；可省略。"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "status": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": true,
+            "description": "结构化记录"
+          },
+          "minItems": 0,
+          "description": "需核对并读取的规则文件及内容哈希"
+        }
+      },
+      "required": [
+        "url",
+        "workflow",
+        "output_dir"
+      ],
+      "additionalProperties": false,
+      "description": "本节点的局部输入；不读取其他节点的隐含状态"
+    },
+    "outputs": {
+      "success": {
+        "type": "object",
+        "properties": {
+          "prompt_id": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "ComfyUI 返回的作业编号。"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": true,
+              "description": "结构化记录"
+            },
+            "minItems": 1,
+            "description": "本次需要处理或交接的实际成果、文件引用或具名成果包。"
+          }
+        },
+        "required": [
+          "prompt_id",
+          "artifacts"
+        ],
+        "additionalProperties": true,
+        "description": "已完成作业编号及实际保存的文件"
+      }
+    }
+  },
+  "title": "ComfyUI 生成与处理"
+}

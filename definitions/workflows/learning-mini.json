@@ -1,12 +1,11 @@
 {
   "id": "learning-mini",
-  "version": "1",
+  "version": "2",
   "description": "小型讲解—人工答题—审阅—有界再练习。等待不调用模型；修正练习最多三轮后进入明确待决节点。",
   "nodes": {
     "lesson": {
-      "node": "agent.reason@1",
+      "node": "learning.explain@1",
       "input": {
-        "purpose": "按输入目标给简短讲解与一道可检验理解的题目；输出 lesson、question、expected_evidence。",
         "topic": {
           "$ref": "input.topic"
         },
@@ -16,12 +15,11 @@
       }
     },
     "practice": {
-      "node": "agent.reason@1",
+      "node": "learning.practice@1",
       "depends": [
         "lesson"
       ],
       "input": {
-        "purpose": "把题目交给用户，以 kind=waiting 保存问题与答复映射，不编造用户回答。收到 reply 后保留原答案及题目，输出 answer、question、artifacts。失败反馈用于调整练习与讲解，不替用户作答。",
         "lesson": {
           "$ref": "steps.lesson.output"
         },
@@ -32,7 +30,7 @@
       }
     },
     "review": {
-      "node": "artifact.review@1",
+      "node": "artifact.review@2",
       "depends": [
         "practice"
       ],
@@ -90,7 +88,7 @@
       }
     },
     "decision": {
-      "node": "agent.reason@1",
+      "node": "learning.decide@1",
       "depends": [
         "review"
       ],
@@ -101,7 +99,6 @@
         ]
       },
       "input": {
-        "purpose": "已到当前练习路径上限，说明理解障碍、已试方法和证据，提出改变教学方案/目标的选项并报告 waiting。没有新依据或用户决定，不继续相同练习，不宣布掌握。",
         "feedback": {
           "$ref": "vars.feedback"
         },

@@ -19,9 +19,12 @@ def main():
     # Exclusive artifact creation makes accidental duplicate execution observable.
     with path.open("xb") as stream:
         stream.write(content)
-    print(json.dumps({"outcome": data.get("outcome", "passed"), "output": {
+    output = {
         "path": str(path), "sha256": hashlib.sha256(content).hexdigest(),
-        "size_bytes": len(content), "text": content.decode("utf-8")}}, ensure_ascii=False))
+        "size_bytes": len(content), "text": content.decode("utf-8")}
+    if data.get("register_document"):
+        output["documents"] = [str(path)]
+    print(json.dumps({"outcome": data.get("outcome", "passed"), "output": output}, ensure_ascii=False))
     return 0
 
 

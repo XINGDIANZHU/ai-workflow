@@ -28,7 +28,8 @@ def fixture_output(state, request, output=None, outcome="success"):
         defaults = {
             "requirements": {"constraints": [], "documents": ["fixture-document"]},
             "prepare": {"capabilities": [], "reuse": [], "evidence": ["fixture-evidence"]},
-            "design": {"plan_id": "plan-A", "documents": ["fixture-document"]},
+            "design": {"plan_id": "plan-A", "documents": ["fixture-document"],
+                       "execution_plan": ["implement critical path", "validate and complete details"]},
             "evaluate": {"assessment": "fixture assessment", "reason": "fixture changed premise", "evidence": ["fixture-evidence"]},
             "plan": {"documents": ["fixture-document"]},
             "deliver": {"deliverables": request["input"].get("artifacts"),
@@ -42,10 +43,20 @@ def fixture_output(state, request, output=None, outcome="success"):
                         "issue_id": "fixture-problem", "reason": "fixture changed premise"}
         if node_id.startswith("repair_"):
             defaults = {"changes": ["fixture correction"], "evidence": ["fixture-evidence"], "reason": "fixture changed premise"}
+        if node_id.startswith("execute_"):
+            defaults = {"child_run": "fixture-child", "status": "succeeded" if outcome == "success" else "failed", "steps": {}}
     elif state["workflow"]["id"] == "experience-processing":
         defaults = ({"reason": "fixture no reusable finding", "closed_receipt": {"fixture": True}}
                     if node_id == "extract" else {"saved": {"fixture": True}, "verified_scope": ["fixture"],
                                                 "reuse_entry": "fixture-only", "closed_receipt": {"fixture": True}})
+    if request['node_spec'].get('id', '').startswith('artifact.review'):
+        defaults = {"verdict": outcome, "evidence": ["fixture-evidence"], "defects": [], "unverified": [],
+                    "artifacts": deepcopy(request['input']['artifacts']), "issue_id": "fixture-problem",
+                    "reason": "fixture changed premise", **defaults}
+    if state['workflow']['id'] == 'learning-mini':
+        defaults = {'lesson': {'lesson': 'fixture explanation', 'expected_evidence': 'fixture reasoning'},
+                    'practice': {'question': request['input'].get('lesson', {}).get('question'),
+                                 'artifacts': {'answer': (output or {}).get('answer', 'fixture answer')}}}.get(node_id, defaults)
     return {**defaults, **(output or {})}
 
 
@@ -68,7 +79,7 @@ def method_before_evaluation():
 
 
 def task_lists():
-    return {
+    tasks = {
         "phase1_tasks": {
             "reason": {"kind": "agent", "version": "1", "phase": 1, "instruction": "fixture reasoning",
                        "input": {"request": {"$ref": "input.context.request"}}, "outcomes": ["success"]},
@@ -80,6 +91,12 @@ def task_lists():
                        "input": {"accepted": {"$ref": "input.phase1"}}, "outcomes": ["success"]},
         },
     }
+    for group in tasks.values():
+        for node in group.values():
+            node.setdefault('depends', [])
+            node['io_contract'] = {'version': '1', 'input': {'type': 'object'},
+                                   'outputs': {'success': {'type': 'object'}}}
+    return tasks
 
 
 def method_before_first_review():
@@ -107,7 +124,7 @@ def test_every_definition_loads_and_published_rules_match_actual_files():
         while pending:
             value = pending.pop()
             if isinstance(value, dict):
-                if "rules" in value:
+                if isinstance(value.get("rules"), list):
                     assert value["rules"] == loaded["rules"]
                 pending.extend(value.values())
             elif isinstance(value, list):
@@ -234,7 +251,7 @@ def test_unresolved_semantic_judgment_waits_without_routing(reason):
     state = method_before_evaluation()
     request = dispatch(state, "evaluate")
     report(state, {"report_id": "fixture-wait", "execution_id": request["execution_id"], "attempt": 1,
-                   "kind": "waiting", "waiting": {"reason": reason, "question": "需要证据或决定"}})
+                   "kind": "waiting", "waiting": {"reason": reason, "question": "需要证据或决定", "resume_condition": "获得明确依据"}})
     assert state["status"] == "waiting"
     assert ready(state) == []
     resumed = control(state, "reply", {"expected_revision": state["revision"], "node_id": "evaluate", "reply": "new evidence"})
@@ -249,7 +266,7 @@ def test_goal_change_after_reply_stops_old_work_and_revalidates_same_run():
     original_run = state["run_id"]
     request = dispatch(state, "evaluate")
     report(state, {"report_id": "goal-question", "execution_id": request["execution_id"],
-                   "kind": "waiting", "waiting": {"reason": "goal_decision", "question": "Which result?"}})
+                   "kind": "waiting", "waiting": {"reason": "goal_decision", "question": "Which result?", "resume_condition": "User decides"}})
     reply = "User changes the goal to deliver A2 and B2"
     control(state, "reply", {"expected_revision": state["revision"], "node_id": "evaluate", "reply": reply})
     changed_input = {**state["input"], "request": reply, "source": "fixture user clarification"}
@@ -291,7 +308,10 @@ def test_goal_change_after_reply_stops_old_work_and_revalidates_same_run():
     final_review = done(state, "verify_phase2", {}, "passed")
     assert final_review["input"]["criteria"]["acceptance"] == "verify both revised artifacts"
     delivery = done(state, "deliver", {})
-    assert delivery["input"]["artifacts"] == {"phase1": {"artifacts": ["A2"]}, "phase2": {"artifacts": ["B2"]}}
+    assert delivery["input"]["artifacts"] == {"phase1": state['steps']['execute_phase1']['output'],
+                                              "phase2": state['steps']['execute_phase2']['output']}
+    assert delivery["input"]["artifacts"]["phase1"]["artifacts"] == ["A2"]
+    assert delivery["input"]["artifacts"]["phase2"]["artifacts"] == ["B2"]
     assert state["status"] == "succeeded" and state["run_id"] == original_run
     assert state["route_rounds"] == rounds
     assert state["reports"]["goal-superseded"]["result"]["accepted"] is True
@@ -300,7 +320,9 @@ def test_goal_change_after_reply_stops_old_work_and_revalidates_same_run():
 @pytest.mark.parametrize("outcome", ["value", "no_value"])
 def test_experience_flow_is_independent_and_no_value_skips_maintenance(outcome):
     state = new_run("experience-fixture", definition("experience-processing"), {"item_id": "known-item", "owner": "same-owner"})
-    done(state, "extract", {"candidate": {"evidence": "fixture"}, "claim": {"owner": "same-owner"}}, outcome)
+    done(state, "extract", {"candidate": {"evidence": ["fixture"], "scope": "fixture scope", "exclusions": [],
+           "maintenance_goal": "correct recorded finding", "validation": "inspect source", "existing_entry": None},
+           "claim": {"owner": "same-owner"}}, outcome)
     if outcome == "value":
         assert ready(state) == ["maintain"]
         request = done(state, "maintain", {"closed_receipt": {"fixture": "not-real-ledger"}})
@@ -316,7 +338,7 @@ def test_picture_and_existing_artifact_use_identical_review_contract():
     generated = definition("picture-process-review")
     existing = definition("existing-artifact-review")
     a, b = generated["nodes"]["review"], existing["nodes"]["review"]
-    for key in ("node", "version", "kind", "instruction", "outcomes", "required_inputs", "definition_sha256"):
+    for key in ("node", "version", "kind", "instruction", "outcomes", "required_inputs", "definition_sha256", "io_contract"):
         assert a[key] == b[key]
     assert generated["nodes"]["process"]["input"] == {"$ref": "input.comfy_request"}
     assert set(a["input"]) == set(b["input"]) == {"artifacts", "criteria"}
@@ -330,10 +352,12 @@ def test_learning_uses_actual_reply_and_stops_after_three_further_practices():
     state = new_run("learning-fixture", definition("learning-mini"), {"topic": "比例", "criteria": "解释推理"})
     done(state, "lesson", {"question": "fixture question"})
     first = dispatch(state, "practice")
-    report(state, {"report_id": "ask", "execution_id": first["execution_id"], "kind": "waiting", "waiting": {"question": "fixture"}})
+    report(state, {"report_id": "ask", "execution_id": first["execution_id"], "kind": "waiting", "waiting": {
+        "reason": "human answer needed", "question": "fixture", "resume_condition": "learner answers"}})
     assert ready(state) == []
     control(state, "reply", {"expected_revision": state["revision"], "node_id": "practice", "reply": "learner answer"})
-    report(state, {"report_id": "answer", "execution_id": first["execution_id"], "kind": "completed", "outcome": "success", "output": {"answer": "learner answer"}})
+    report(state, {"report_id": "answer", "execution_id": first["execution_id"], "kind": "completed", "outcome": "success",
+                   "output": {"answer": "learner answer", "question": "fixture question", "artifacts": {"answer": "learner answer"}}})
     for index in range(3):
         done(state, "review", {"defects": [str(index)]}, "repair")
         assert ready(state) == ["practice"]
@@ -341,7 +365,8 @@ def test_learning_uses_actual_reply_and_stops_after_three_further_practices():
     done(state, "review", {"defects": ["still fails"]}, "repair")
     assert ready(state) == ["decision"]
     decision = dispatch(state, "decision")
-    report(state, {"report_id": "limit-wait", "execution_id": decision["execution_id"], "kind": "waiting", "waiting": {"reason": "change teaching plan"}})
+    report(state, {"report_id": "limit-wait", "execution_id": decision["execution_id"], "kind": "waiting", "waiting": {
+        "reason": "change teaching plan", "question": "which alternative?", "resume_condition": "user decides"}})
     assert state["status"] == "waiting"
     assert sum(event["event"] == "dispatch" and event["node_id"] == "practice" for event in state["history"]) == 4
 
@@ -384,6 +409,7 @@ def test_final_review_and_delivery_receive_both_phases_and_all_acceptance():
     done(state, "verify_phase1", {"verdict": "passed"}, "passed")
     second = {"artifacts": [{"path": "second-independent-result.txt"}]}
     done(state, "execute_phase2", second)
+    second = deepcopy(state['steps']['execute_phase2']['output'])
     review = done(state, "verify_phase2", {"verdict": "passed"}, "passed")
     assert review["input"]["artifacts"] == {"phase1": first, "phase2": second}
     assert review["input"]["criteria"]["acceptance"] == state["steps"]["requirements"]["output"]["acceptance"]
@@ -481,15 +507,17 @@ def test_changed_request_after_final_review_executes_and_verifies_both_phases(pa
     first = done(state, "execute_phase1", {"artifacts": ["new-A"]})
     assert first["input"]["phase"] == 1
     first_review = done(state, "verify_phase1", {}, "passed")
-    assert first_review["input"]["artifacts"] == {"artifacts": ["new-A"]}
+    assert first_review["input"]["artifacts"] == state['steps']['execute_phase1']['output']
+    assert first_review["input"]["artifacts"]["artifacts"] == ["new-A"]
     assert state["variables"]["phase"] == 2
     second = done(state, "execute_phase2", {"artifacts": ["new-B"]})
     assert second["input"]["phase"] == 2
-    assert second["input"]["input"]["phase1"] == {"artifacts": ["new-A"]}
+    assert second["input"]["input"]["phase1"] == state['steps']['execute_phase1']['output']
     final_review = done(state, "verify_phase2", {}, "passed")
     assert final_review["input"]["criteria"]["acceptance"] == "changed acceptance"
-    assert final_review["input"]["artifacts"] == {"phase1": {"artifacts": ["new-A"]},
-                                                  "phase2": {"artifacts": ["new-B"]}}
+    assert final_review["input"]["artifacts"] == {"phase1": state['steps']['execute_phase1']['output'],
+                                                  "phase2": state['steps']['execute_phase2']['output']}
+    assert final_review["input"]["artifacts"]["phase2"]["artifacts"] == ["new-B"]
     delivery = done(state, "deliver", {})
     assert delivery["input"]["artifacts"] == final_review["input"]["artifacts"]
     assert state["status"] == "succeeded"

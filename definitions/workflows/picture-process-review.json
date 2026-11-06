@@ -1,10 +1,10 @@
 {
   "id": "picture-process-review",
-  "version": "1",
+  "version": "2",
   "description": "执行一个已有本地ComfyUI图片处理请求并由通用审阅节点实际审阅；运行完成表示审阅已交付，产物是否通过以review.outcome为准。",
   "nodes": {
     "process": {
-      "node": "comfy.operation@1",
+      "node": "comfy.operation@2",
       "input": {
         "$ref": "input.comfy_request"
       },
@@ -13,7 +13,7 @@
       ]
     },
     "review": {
-      "node": "artifact.review@1",
+      "node": "artifact.review@2",
       "depends": [
         "process"
       ],

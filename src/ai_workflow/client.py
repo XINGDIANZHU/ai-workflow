@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 import httpx
 from .loader import load_workflow
+from .contracts import validate_workflow, validate_connections
 
 
 class Client:
@@ -20,8 +21,10 @@ class Client:
         return result.json()
 
     def start(self, run_id, workflow, inputs=None, limits=None):
+        inputs = {} if inputs is None else inputs
+        validate_connections(validate_workflow(workflow), inputs)
         return self.call("WorkflowRun", run_id, "start", {"explicit_start": True,
-             "workflow": workflow, "input": inputs or {}, "limits": limits or {}})
+             "workflow": workflow, "input": inputs, "limits": limits or {}})
 
     def read(self, run_id):
         return self.call("WorkflowRun", run_id, "snapshot")

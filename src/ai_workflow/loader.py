@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+from .contracts import validate_workflow
 
 
 def load_workflow(path, definitions=None):
@@ -21,12 +22,16 @@ def load_workflow(path, definitions=None):
         if reference != f"{definition['id']}@{definition['version']}":
             raise ValueError("node reference/version mismatch")
         forbidden = {"kind", "version", "instruction", "outcomes"}.intersection(spec)
+        if "io_contract" in definition:
+            allowed = {"node", "input", "depends", "when", "routes", "resources", "cost",
+                       "phase", "logical", "title", "description"}
+            forbidden = set(spec) - allowed
         if forbidden:
             raise ValueError(f"instance overrides definition contract: {sorted(forbidden)}")
         workflow["nodes"][step] = {**definition, **spec,
                                     "definition_sha256": hashlib.sha256(raw).hexdigest()}
     _resolve_rules(workflow, project)
-    return workflow
+    return validate_workflow(workflow)
 
 
 def _resolve_rules(value, project):

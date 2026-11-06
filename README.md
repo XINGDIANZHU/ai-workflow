@@ -2,16 +2,19 @@
 
 独立的总控、节点契约、可复用流程及本地网页工作台。Restate 是唯一运行状态权威，Python 承载节点调度与执行接入；Agent、程序及 ComfyUI 通过领取/回报契约协作。
 
+当前版本 **0.2.0**：包含带输入输出契约的节点、拖线编排、成果与历史查阅，以及统一的本机启动入口。适用于已验收的个人本机部署；新增软件执行器和其他机器仍按实际环境验收。
+
 本仓库从已有实现提取，只携带代码、定义、必要规则和可复用测试。**没有迁移个人任务、经验内容、成果、执行回执、账号配置或运行数据库。**经验处理能力仍保留，新部署的任务列表与经验账本从空白开始。安装依赖、启动服务和登记端点本身不会创建业务任务。
 
 ## 仓库内容
 
 - `src/ai_workflow/`：总控、执行适配、MCP/CLI 和网页工作台。
-- `definitions/nodes/`：7 个固定版本节点定义。
+- `definitions/nodes/`：18 个自带输入输出契约的节点定义，另保留 7 个旧版本。
 - `definitions/workflows/`：中心方法论任务执行、经验处理、学习小流程、图片处理与审阅、已有成果审阅，共 5 条流程。
 - `methodology/`：中心方法论 v1.2 本体与细则的完整规则快照；不是个人经验数据。
 - `examples/`、`tests/`：合成输入和可复用检查，无真实任务记录。
 - `ops/`：独立 Restate 配置、Linux 启动和端点登记入口。
+- [节点契约与复用](docs/NODE_CONTRACTS.md)：节点输入输出、连接校验、等待/失败及版本规则。
 - `.local/`：运行时才产生的数据，已排除在 Git 外。
 
 使用源代码仓库安装，推荐 `pip install -e .`。定义和规则是仓库资产，不承诺仅复制 Python wheel 就包含全部流程。
@@ -62,9 +65,27 @@ py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m ai_workflow.web
 ```
 
-也可双击 `start-workbench.cmd` 启动网页服务，再在浏览器打开上述地址；此入口不接管或启动原系统后端。MCP 启动命令是虚拟环境中的 `ai-workflow-mcp`，或 `python -m ai_workflow.mcp_server`。在目标 Agent 客户端自行登记这个新路径，不复制原机器的全局配置或凭据。详细使用见 [Agent 入口](docs/AGENT_ENTRY.md)。
+配置好下面的本机部署信息后，可双击 `start-workbench.cmd`：它启动本仓库的后端、登记端点、启动网页并打开浏览器。重复打开会复用已有服务，不创建业务任务。MCP 启动命令是虚拟环境中的 `ai-workflow-mcp`，或 `python -m ai_workflow.mcp_server`。在目标 Agent 客户端登记当前仓库路径，不复制原机器的全局配置或凭据。详细使用见 [Agent 入口](docs/AGENT_ENTRY.md)。
 
 如果 Windows 和 WSL 共用一个工作目录，Linux 虚拟环境另建 `.venv-linux`，安装 `.[server]`，启动端点前将 `PYTHON_BIN` 指向其 `bin/python`，不要与 Windows `.venv` 混用。MCP/网页与后端各自在自己的系统中使用可达地址；WSL 回环转发受目标机配置影响，需要核对。
+
+统一启动入口读取不入 Git 的 `.local/deployment.json`。按目标机填写，以下路径仅为格式示例：
+
+```json
+{
+  "wsl_distribution": "Ubuntu",
+  "linux_root": "/mnt/d/work/ai-workflow",
+  "python_bin": "/mnt/d/work/ai-workflow/.venv-linux/bin/python",
+  "restate_bin": "/usr/local/bin/restate-server",
+  "path_map": {"D:/work/ai-workflow": "/mnt/d/work/ai-workflow"}
+}
+```
+
+Windows 使用 `.venv\Scripts\python.exe ops\manage.py start|stop|restart|status` 管理本仓库的后端；Linux 使用本机 Python 执行同一脚本。操作前按完整进程命令确认归属，不依据旧 PID 误停其他服务。`stop` 不清空数据库，也不停止已交给其他执行器的软件作业。网页关闭后后端仍可运行；重启沿用同一数据目录。普通 Linux 无需 WSL 配置，也可继续使用上述前台脚本。
+
+解释器、Restate 程序和虚拟环境必须独立可用；卸载另一份部署前，核对 `.venv-linux/pyvenv.cfg`、解释器链接及 `restate_bin` 均未指向它。服务不设开机自启，电脑重启后双击启动入口即可。
+
+替换已有 MCP 配置后，已打开的 Agent 客户端可能仍缓存旧连接；重新加载 MCP 或重启客户端后才使用新配置。不要保留旧服务来掩盖连接尚未刷新的问题。
 
 ## 路径和软件接入
 
@@ -101,7 +122,7 @@ export AI_WORKFLOW_PATH_MAP='{"D:/work/ai-workflow":"/mnt/d/work/ai-workflow"}'
 
 新克隆的仓库不会带旧任务；若主动把 `AI_WORKFLOW_URL` 指到已有数据库，仍会看见那个实例的任务，这是连接已有服务而非仓库迁移。保留默认独立端口及新的空数据目录即可隔离。
 
-GitHub 仓库用于保存和移植代码，不等于部署了公网服务。当前不包含账号系统、云部署、旧任务迁移或新 AI 助手产品。原系统不依赖本仓库，原任务和经验保持在原部署。
+GitHub 仓库用于保存和移植代码，不等于部署了公网服务。当前不包含账号系统、云部署、旧任务迁移或新 AI 助手产品。替换旧部署时，历史任务和经验可以离线归档；它们不自动出现在新工作台。
 
 ## 验证
 
@@ -112,4 +133,6 @@ GitHub 仓库用于保存和移植代码，不等于部署了公网服务。当�
 
 测试复用原契约检查，并补查换目录加载、规则完整性和显式文件映射。它们使用合成输入、临时文件或本机模拟服务，不连接真实 Restate，不调用付费模型，不启动真实 ComfyUI。原部署专用的在线测试及其历史验收记录没有迁入；跨机器完整部署仍需在目标环境验收。
 
-本次提取验证：Windows 检查 220 项通过、1 项因无法创建符号链接跳过；Linux 对路径迁移、规则加载、成果归档及工作台接口的 96 项检查通过。上述结果不等于在任意新机器上已完成部署。
+`tests/test_live_release.py` 是单独显式启用的在线验收：设置 `WORKFLOW_LIVE=1` 后运行，覆盖当前方法论的两阶段执行、真实程序产物、文档版本、返工、控制和 MCP。另设 `WORKFLOW_CRASH=1` 会强制停止并重启本仓库后端，验证等待执行的身份和历史恢复；只能在允许中断的验收环境运行。它创建明确标为测试的记录，Agent 的判断使用测试数据，不证明模型推理质量，也不调用付费模型。
+
+0.2.0 验证记录：Windows 回归基线 248 项通过、2 项跳过（符号链接权限、默认关闭的在线验收）；随后成果识别修正相关 78 项通过，独立 Linux 环境相关 74 项通过。拖线模型 8 项检查及浏览器拖线、保存、重开结果沿用本次功能开发中有效的验证。真实服务验收覆盖两阶段、返工、等待时强制重启恢复、历史文档版本和新 MCP 会话；另实际核对了页面上的成果、分配与子流程来源，并验证旧部署移走后的独立重启。Agent 判断仍是测试数据，不代表真实模型质量或任意环境已验收。

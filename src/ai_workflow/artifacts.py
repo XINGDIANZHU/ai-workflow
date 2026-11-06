@@ -24,6 +24,12 @@ def artifact_candidates(value):
     """Yield explicit file references with their output-field location."""
     def walk(obj, trail="", receipts=(), prefix=""):
         if isinstance(obj, dict):
+            # Embedded task definitions describe future work, not delivered files.
+            # In particular, stdin.output_path must not create a premature receipt.
+            if (obj.get("kind") in ("agent", "program", "comfyui", "tasks", "subflow")
+                    and isinstance(obj.get("version"), str) and "input" in obj
+                    and isinstance(obj.get("outcomes"), list)):
+                return
             # A child result envelope carries the receipts accepted at that
             # node. Bind them to that output only: siblings may reuse a path
             # with different versions. Never reopen such a path on aggregation.

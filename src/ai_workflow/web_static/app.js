@@ -42,10 +42,30 @@ function empty(title, message, action) { return el("div", {class:"empty-state"},
 function dataBox(title, value, full = false) { return el("section", {class:`data-box ${full ? "full" : ""}`}, el("div", {class:"data-box-title"}, title), el("pre", {}, display(value))); }
 function notice(message, type = "") { return el("div", {class:`notice ${type}`}, message); }
 function workflowTitle(workflow, fallback) { return workflow?.title || titles[workflow?.id] || fallback || workflow?.id || "未命名流程"; }
-function nodeTitle(id, spec, workflow) { return spec?.title || spec?.name || (titles[workflow?.id] ? nodeTitles[id] : null) || id; }
+function nodeTitle(id, spec, workflow) { return spec?.title || spec?.name || (workflow?.id==='methodology-execution' ? nodeTitles[id] : null) || nodeDef(spec).title || (titles[workflow?.id] ? nodeTitles[id] : null) || id; }
 function inspectionNodeTitle(run, node) { return node.title && node.title !== node.node_id ? node.title : nodeTitle(node.node_id, run.workflow?.nodes?.[node.node_id], run.workflow); }
 function summaryNodeTitle(summary, node) { const workflow=S.catalog.workflows.find(x=>x.workflow.id===summary.workflow_id)?.workflow || {id:summary.workflow_id};return inspectionNodeTitle({workflow},node); }
 function nodeDef(spec = {}) { const ref = S.catalog.nodes.find(n => n.key === spec.node)?.definition || {}; return {...ref, ...spec}; }
+function nodeChoices() { return [...S.catalog.nodes].sort((a,b)=>Number(!!b.definition.io_contract)-Number(!!a.definition.io_contract)); }
+function nodeChoiceLabel(n) { return `${n.definition.title ? n.definition.title+' · ' : ''}${n.key}${n.definition.io_contract ? "" : " · 旧版宽松契约"}`; }
+function nodeContractPanel(def) {
+  const c=def.io_contract;
+  if(!c)return notice("旧版节点：输入输出未全面校验。新流程建议选择带契约的节点。","info");
+  return el("details",{class:"full-width"},el("summary",{class:"details-toggle"},`输入输出契约 · v${c.version}（只读）`),
+    el("p",{class:"field-hint"},"必需输入："+(c.input.required||[]).join("、")),
+    dataBox("输入：字段类型、含义及可选项",c.input),dataBox("输出：按结果分支校验",c.outputs),
+    el("p",{class:"field-hint"},"等待须说明原因、问题和恢复条件；错误须提供 code。此契约随节点版本复用，不能在编排中覆盖。"));
+}
+function readableNodeContract(def) {
+  const c=def.io_contract;
+  const section=(label,schema)=>el('details',{class:'node-contract-section'},el('summary',{},label+' · '+Object.keys(schema.properties||{}).length+' 个字段'),
+    schema.description&&el('p',{class:'field-hint'},schema.description),
+    ...WorkflowGraph.fields(schema).map(f=>el('div',{class:'contract-field'},el('div',{},el('code',{},f.path),el('span',{class:'chip'},f.required?'必填':'可选')),el('p',{},f.schema.description || '按下列类型交接'),el('small',{},WorkflowGraph.describe(f.schema)))));
+  return el('div',{class:'readable-contract'},el('h3',{},'节点功能'),el('p',{},def.description || def.instruction?.split('\n').at(-1) || '尚未提供功能说明'),
+    el('details',{},el('summary',{},'完整职责与执行要求'),el('p',{class:'instruction-text'},def.instruction || '由对应执行器执行')),
+    c&&section('查看入参说明',c.input),c&&Object.entries(c.outputs).map(([outcome,schema])=>section('查看出参：'+outcome,schema)),
+    nodeContractPanel(def));
+}
 function pageIntro(eyebrow, title, description, actions) { return el("div", {class:"page-intro"}, el("div", {}, el("div", {class:"eyebrow"}, eyebrow), el("h1", {}, title), el("p", {class:"subtext"}, description)), actions); }
 function toast(message, error = false) { const box = $("#toast"); box.textContent = message; box.className = `toast ${error ? "error" : ""}`; box.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => box.hidden = true, 6500); }
 function showError(error, target = $("#global-alert")) { target.textContent = error.message || String(error); target.hidden = false; if (target !== $("#global-alert")) target.className = "inline-error"; }
@@ -521,9 +541,53 @@ function syncEditor() {
     if(!ed.workflow.nodes[ed.selected])ed.selected=Object.keys(ed.workflow.nodes)[0]||null;
   }else{
     const input=$("#node-input");if(input&&ed.selected)ed.workflow.nodes[ed.selected].input=JSON.parse(input.value);
+    else if(ed.selected){
+      const spec=ed.workflow.nodes[ed.selected];
+      for(const box of main.querySelectorAll('[data-param]')){
+        const format=box.dataset.format,value=box.value;
+        if(value===''){delete spec.input[box.dataset.param];continue;}
+        spec.input[box.dataset.param]=format==='json'?JSON.parse(value):format==='task'?{$ref:'input.'+value}:value;
+      }
+    }
   }
 }
 function safeEditorAction(fn) {try{syncEditor();fn();}catch(error){editorError(new Error(`请先修正 JSON：${error.message}`));}}
+function graphAction(fn){try{syncEditor();fn();}catch(error){editorError(error);toast(error.message,true);}}
+function connectEditor(link){graphAction(()=>{const ed=S.editor;ed.workflow=WorkflowGraph.connect(ed.workflow,nodeDef,link);ed.dirty=true;ed.selected=link.to;ed.edge=null;renderEditor();toast('已连接。完整字段约束会在校验和保存时检查。');});}
+function removeEditorEdge(edge){graphAction(()=>{const ed=S.editor;ed.workflow=WorkflowGraph.disconnect(ed.workflow,edge);ed.dirty=true;ed.edge=null;renderEditor();toast(edge.kind==='data'?'已断开参数连接，执行依赖保留。':'已删除执行依赖及对应分支条件。');});}
+function renderFlowCanvas(){
+  const ed=S.editor;
+  return WorkflowGraph.createCanvas({workflow:ed.workflow,definition:nodeDef,title:(id,spec)=>nodeTitle(id,spec,ed.workflow),selected:ed.selected,el,zoom:ed.zoom||.8,scroll:ed.scroll,
+    onSelect:id=>graphAction(()=>{ed.selected=id;ed.edge=null;renderEditor();}),onConnect:connectEditor,
+    onEdge:edge=>graphAction(()=>{ed.edge=edge;renderEditor();}),onError:error=>{editorError(error);toast(error.message,true);},
+    onMove:(id,point)=>{ed.workflow.ui={...ed.workflow.ui,positions:{...ed.workflow.ui?.positions,[id]:point}};ed.dirty=true;},
+    onZoom:zoom=>{ed.zoom=zoom;},onScroll:scroll=>{ed.scroll=scroll;},
+    onArrange:()=>graphAction(()=>{ed.workflow.ui={...ed.workflow.ui,positions:WorkflowGraph.layout(ed.workflow)};ed.scroll={x:0,y:0};ed.dirty=true;renderEditor();})});
+}
+function renderParameterInputs(spec,def){
+  const ed=S.editor;
+  const raw=()=>field('节点输入 JSON',el('textarea',{id:'node-input',class:'code-input',value:json(spec.input??{}),spellcheck:false,oninput:()=>{ed.dirty=true;}}),'保留完整参数。字段连线由画布写入引用。','full-width');
+  if(spec.input?.$ref&&ed.inputMode!=='json')return el('div',{class:'parameter-fields'},el('h3',{},'入参来源'),el('p',{class:'field-hint'},'全部入参由以下来源整体提供，字段要求见上方入参说明。'),el('code',{},spec.input.$ref),
+    button('解除整体绑定，逐项填写',()=>graphAction(()=>{spec.input={};ed.inputMode='form';ed.dirty=true;renderEditor();}),'small'),button('高级：输入 JSON',()=>graphAction(()=>{ed.inputMode='json';renderEditor();}),'small'));
+  if(!def.io_contract||ed.inputMode==='json'||spec.input?.$ref||!spec.input||Array.isArray(spec.input)||typeof spec.input!=='object')return el('div',{},button('使用参数表单',()=>graphAction(()=>{ed.inputMode='form';renderEditor();}),'small'),raw());
+  return el('div',{class:'parameter-fields'},el('h3',{},'填写入参'),...Object.entries(def.io_contract.input.properties||{}).map(([name,schema])=>{
+    const value=spec.input[name],required=def.io_contract.input.required?.includes(name),bound=value?.$ref;
+    const clear=()=>graphAction(()=>{delete spec.input[name];ed.dirty=true;renderEditor();});
+    if(bound)return el('div',{class:'parameter-field'},el('strong',{},name+(required?' *':'')),el('p',{class:'field-hint'},schema.description||WorkflowGraph.describe(schema)),el('code',{},bound),button('清除此入参',clear,'small'));
+    const defaultFormat=typeof value==='string'||schema.type==='string'||schema.anyOf?.some(s=>s.type==='string')?'text':'json';
+    const format=ed.formats?.[ed.selected+':'+name]||defaultFormat;
+    const choice=el('select',{'aria-label':name+' 填写方式'},...[['text','文字'],['json','结构化值'],['task','启动任务时提供']].map(([v,label])=>el('option',{value:v,selected:format===v},label)));
+    choice.addEventListener('change',()=>graphAction(()=>{ed.formats={...ed.formats,[ed.selected+':'+name]:choice.value};renderEditor();}));
+    const box=el('textarea',{'data-param':name,'data-format':format,'aria-label':'入参 '+name,rows:2,value:value===undefined?'':format==='json'?json(value):typeof value==='string'?value:json(value),placeholder:format==='task'?'任务输入字段名，例如 request':format==='json'?'例如 ["条件一", "条件二"]':'填写内容',oninput:()=>{ed.dirty=true;}});
+    return el('div',{class:'parameter-field'},field(name+(required?' *':''),box,(schema.description||'')+' · '+WorkflowGraph.describe(schema)),choice);
+  }),button('高级：输入 JSON',()=>graphAction(()=>{ed.inputMode='json';renderEditor();}),'small'));
+}
+function renderEdgeInspector(edge){
+  const label=edge.kind==='data'?'参数传递':edge.kind==='route'?'有界回退':'执行依赖';
+  return el('aside',{class:'editor-inspector'},el('h3',{},label),el('p',{},`${edge.from}${edge.sourcePath?'.'+edge.sourcePath:''} → ${edge.to}${edge.path?'.'+edge.path:''}`),edge.outcome&&el('p',{},'结果条件：'+edge.outcome),
+    el('p',{class:'field-hint'},edge.kind==='data'?'删除参数连接后，执行先后关系仍保留。必填入参需重新填写或连接。':edge.kind==='route'?'回退包含次数上限等规则，请在完整 JSON 中修改。':'删除前需先断开依赖它的参数连接。'),
+    edge.kind!=='route'&&button('删除这条连线',()=>removeEditorEdge(edge),'danger'),button('返回节点说明',()=>{S.editor.edge=null;renderEditor();},'small'));
+}
 function renderEditor() {
   const ed=S.editor;if(!ed)return renderWorkflows();
   const wf=ed.workflow;
@@ -537,7 +601,7 @@ function renderEditor() {
   if(ed.mode==="advanced"){
     const text=el("textarea",{id:"workflow-json",class:"code-input",value:ed.advanced || json(wf),spellcheck:false,"aria-label":"完整流程 JSON",oninput:e=>{ed.advanced=e.target.value;ed.dirty=true;}});
     content=el("div",{class:"advanced-editor"},field("完整流程 JSON",text,"这里保留所有字段，包括条件 when、回退 routes、变量、资源和额外元数据。"),el("div",{class:"form-actions"},button("应用 JSON 到节点图",()=>safeEditorAction(()=>{ed.mode="visual";renderEditor();toast("完整定义已应用。保存前还会进行服务端校验。");}),"small")));
-  }else content=el("div",{class:"editor-layout"},el("div",{class:"editor-canvas"},el("div",{class:"editor-info"},field("流程名称",title),field("版本",version),field("流程 ID",id,"稳定标识；保存文件名在页面底部设置。","wide"),field("流程说明",description,"","wide")),renderGraph(wf,null,ed.selected,node=>safeEditorAction(()=>{ed.selected=node;renderEditor();})),el("div",{class:"editor-metadata"},`${Object.keys(wf.nodes).length} 个节点`,el("span",{},"· 实线为依赖，虚线为条件回退"))),renderEditorInspector());
+  }else content=el("div",{class:"editor-layout flow-layout"},el("div",{class:"editor-canvas"},el("details",{class:"flow-metadata"},el('summary',{},'流程名称与版本'),el("div",{class:"editor-info"},field("流程名称",title),field("版本",version),field("流程 ID",id,"稳定标识；保存文件名在页面底部设置。","wide"),field("流程说明",description,"","wide"))),renderFlowCanvas(),el("div",{class:"editor-metadata"},`${Object.keys(wf.nodes).length} 个节点`,el("span",{},"· 绿色：参数 · 灰色：依赖 · 虚线：有界回退"))),ed.edge?renderEdgeInspector(ed.edge):renderEditorInspector());
   const key=el("input",{value:ed.saveKey,"aria-label":"保存路径",oninput:e=>{ed.saveKey=e.target.value;}});
   const leave=button("← 返回流程库",()=>{
     if(ed.dirty)showDialog("离开流程编辑","当前有尚未保存的修改。",body=>body.append(el("div",{class:"form-actions"},button("继续编辑",()=>dialog.close()),button("放弃修改并返回",()=>{dialog.close();S.editor=null;renderWorkflows();},"danger"))));
@@ -546,7 +610,7 @@ function renderEditor() {
   const saveBar=el("div",{class:"save-bar"},field("保存到我的流程",key,"格式：custom/name；name 使用字母、数字、短横线或下划线。"),button("保存流程",()=>saveEditor(),"primary"),button("用当前定义启动",()=>safeEditorAction(()=>openStart({key:"draft",workflow:clone(ed.workflow),title:workflowTitle(ed.workflow)}))));
   main.replaceChildren(
     pageIntro("WORKFLOW STUDIO",workflowTitle(wf),ed.sourceKey?.startsWith("builtin/")?"正在编辑模板副本。保存为自己的流程后，可重复启动。":"编辑流程定义。修改不会改变已经启动的任务。",leave),
-    el("section",{class:"panel"},toolbar,content,el("div",{class:"editor-help"},"节点基础表单只修改显示的字段。条件、回退和其他字段始终保留；复杂规则可在“完整 JSON”中编辑。"),saveBar),
+    el("section",{class:"panel"},toolbar,content,el("div",{class:"editor-help"},"点击节点查看功能与参数。选择输出分支和字段，拖到下游入参；连线自动写入依赖、结果条件与参数引用。复杂回退规则保留在完整 JSON 中。"),saveBar),
     el("div",{id:"editor-feedback",hidden:true,style:"margin-top:15px"})
   );
 }
@@ -555,23 +619,26 @@ function renderEditorInspector() {
   if(!spec)return el("aside",{class:"editor-inspector"},empty("选择一个节点","点击节点卡片编辑依赖与输入，或添加一个新节点。"));
   const def=nodeDef(spec);
   const title=el("input",{value:spec.title || "",placeholder:nodeTitle(id,spec,ed.workflow),oninput:e=>{spec.title=e.target.value;ed.dirty=true;}});
-  const kind=el("select",{},el("option",{value:""},"自定义节点"),...S.catalog.nodes.map(n=>el("option",{value:n.key,selected:spec.node===n.key},n.key)));
+  const kind=el("select",{},el("option",{value:""},"自定义节点"),...nodeChoices().map(n=>el("option",{value:n.key,selected:spec.node===n.key},nodeChoiceLabel(n))));
   kind.value=spec.node || "";
-  kind.addEventListener("change",()=>safeEditorAction(()=>{const reference=kind.value;if(reference){spec.node=reference;for(const key of ["kind","version","instruction","outcomes"])delete spec[key];}else{const current=nodeDef(spec);delete spec.node;Object.assign(spec,{kind:current.kind || "agent",version:"1",instruction:current.instruction || "",outcomes:current.outcomes || ["success"]});}ed.dirty=true;renderEditor();}));
+  kind.addEventListener("change",()=>safeEditorAction(()=>{const reference=kind.value;if(reference){spec.node=reference;for(const key of ["kind","version","instruction","outcomes","id","io_contract","required_inputs","output_contract","artifact_fields","definition_sha256","bounded_cost"])delete spec[key];}else{const current=nodeDef(spec);delete spec.node;Object.assign(spec,{kind:current.kind || "agent",version:current.version || "1",instruction:current.instruction || "",outcomes:current.outcomes || ["success"],...(current.io_contract?{io_contract:clone(current.io_contract),required_inputs:clone(current.required_inputs||[]),artifact_fields:clone(current.artifact_fields||[])}:{})});}ed.dirty=true;renderEditor();}));
   const type=el("select",{},...Object.entries(kindNames).map(([k,v])=>el("option",{value:k,selected:def.kind===k},v)));
   type.addEventListener("change",e=>{spec.kind=e.target.value;ed.dirty=true;});
   const dependencies=el("div",{class:"dependency-list"},...Object.keys(ed.workflow.nodes).filter(n=>n!==id).map(n=>{const check=el("input",{type:"checkbox",checked:(spec.depends||[]).includes(n),"aria-label":`依赖节点 ${n}`,onchange:e=>safeEditorAction(()=>{const set=new Set(spec.depends||[]);e.target.checked?set.add(n):set.delete(n);spec.depends=[...set];ed.dirty=true;renderEditor();})});return el("label",{class:"check-chip"},check,n);}));
-  const input=el("textarea",{id:"node-input",class:"code-input",value:json(spec.input??{}),spellcheck:false,oninput:()=>{ed.dirty=true;}});
   const instructions=!spec.node?el("textarea",{value:spec.instruction || "",oninput:e=>{spec.instruction=e.target.value;ed.dirty=true;}}):null;
-  return el("aside",{class:"editor-inspector"},el("div",{class:"inspector-title"},el("h3",{},"节点设置"),el("span",{class:"chip mono"},id)),el("div",{class:"form-section"},field("显示名称",title),field("可复用能力",kind),!spec.node&&field("节点类型",type),el("div",{class:"field full-width"},el("div",{class:"field-label"},"前置依赖"),dependencies.childElementCount?dependencies:el("div",{class:"field-hint"},"添加更多节点后可选择依赖。")),field("节点输入 JSON",input,"使用 {\"$ref\":\"input.key\"} 或前置节点的 steps.<id>.output 引用。","full-width"),instructions&&field("Agent 指令",instructions,"","full-width"),Object.keys(spec.when||{}).length||Object.keys(spec.routes||{}).length?notice("此节点有条件或回退规则。可在完整 JSON 中查看和修改。","info"):null,el("div",{class:"full-width"},button("删除节点",()=>safeEditorAction(()=>deleteNode(id)),"danger small"))));
+  return el("aside",{class:"editor-inspector"},el("div",{class:"inspector-title"},el("h3",{},"节点说明与设置"),el("span",{class:"chip mono"},id)),readableNodeContract(def),renderParameterInputs(spec,def),el('details',{},el('summary',{},'名称、能力与依赖设置'),el("div",{class:"form-section"},field("显示名称",title),field("可复用能力",kind),!spec.node&&field("节点类型",type),el("div",{class:"field full-width"},el("div",{class:"field-label"},"前置依赖"),dependencies.childElementCount?dependencies:el("div",{class:"field-hint"},"添加更多节点后可选择依赖。")),instructions&&field("Agent 指令",instructions,"","full-width"))),
+    el('details',{},el('summary',{},'连接列表'),...WorkflowGraph.edges(ed.workflow,nodeDef).filter(e=>e.from===id||e.to===id).map(e=>button(`${e.from} → ${e.to}${e.kind==='data'?' · '+(e.sourcePath||'全部输出')+' → '+(e.path||'全部入参'):e.kind==='route'?' · 回退':' · 依赖'}`,()=>{ed.edge=e;renderEditor();},'small'))),button("删除节点",()=>safeEditorAction(()=>deleteNode(id)),"danger small"));
 }
 function openAddNode() {
   showDialog("添加一个节点","选择已有能力，或创建内联定义。",body=>{
     const keys=Object.keys(S.editor.workflow.nodes);let n=keys.length+1;while(keys.includes(`step_${n}`))n++;
     const id=el("input",{value:`step_${n}`,required:true,pattern:"[A-Za-z0-9_-]+"});
-    const capability=el("select",{},...S.catalog.nodes.map(n=>el("option",{value:n.key},n.key)),el("option",{value:"inline:agent"},"空白 Agent 节点"),el("option",{value:"inline:program"},"空白程序节点"));
+    const capability=el("select",{},...nodeChoices().map(n=>el("option",{value:n.key},nodeChoiceLabel(n))),el("option",{value:"inline:agent"},"空白 Agent 节点"),el("option",{value:"inline:program"},"空白程序节点"));
     const err=el("div",{hidden:true});
-    body.append(el("form",{class:"form-section",onsubmit:e=>{e.preventDefault();const key=id.value.trim();if(S.editor.workflow.nodes[key]){showError(new Error("此节点 ID 已存在，请使用其他名称。"),err);return;}const reference=capability.value;const def=S.catalog.nodes.find(n=>n.key===reference)?.definition;const input={};for(const key of def?.required_inputs || [])input[key]="";const spec=reference.startsWith("inline:")?{kind:reference.split(":")[1],version:"1",input:{},depends:[],instruction:""}:{node:reference,input,depends:[]};S.editor.workflow.nodes[key]=spec;S.editor.selected=key;S.editor.dirty=true;S.editor.advanced=null;dialog.close();renderEditor();}},field("节点 ID",id,"字母、数字、短横线或下划线；用于依赖与输出引用。"),field("节点能力",capability),err,el("div",{class:"form-actions"},button("返回",()=>dialog.close()),el("button",{type:"submit",class:"button primary"},"添加节点"))));
+    const preview=el('div',{class:'node-preview'});
+    const updatePreview=()=>{const def=S.catalog.nodes.find(n=>n.key===capability.value)?.definition;preview.replaceChildren(def?readableNodeContract(def):notice('内联节点的功能和契约需由你填写。'));};
+    capability.addEventListener('change',updatePreview);updatePreview();
+    body.append(el("form",{class:"form-section",onsubmit:e=>{e.preventDefault();const key=id.value.trim();if(S.editor.workflow.nodes[key]){showError(new Error("此节点 ID 已存在，请使用其他名称。"),err);return;}const reference=capability.value;const def=S.catalog.nodes.find(n=>n.key===reference)?.definition;const spec=reference.startsWith("inline:")?{kind:reference.split(":")[1],version:"1",input:{},depends:[],instruction:""}:{node:reference,input:{},depends:[]};S.editor.workflow.nodes[key]=spec;S.editor.selected=key;S.editor.edge=null;S.editor.dirty=true;S.editor.advanced=null;const count=Object.keys(S.editor.workflow.nodes).length;S.editor.workflow.ui={...S.editor.workflow.ui,positions:{...S.editor.workflow.ui?.positions,[key]:{x:36+(count-1)*374,y:36}}};dialog.close();renderEditor();}},field("节点 ID",id,"字母、数字、短横线或下划线；用于依赖与输出引用。"),field("节点能力",capability),preview,err,el("div",{class:"form-actions"},button("返回",()=>dialog.close()),el("button",{type:"submit",class:"button primary"},"添加节点"))));
   });
 }
 function deleteNode(id) {

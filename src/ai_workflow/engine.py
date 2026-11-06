@@ -11,7 +11,9 @@ from copy import deepcopy
 from hashlib import sha256
 from typing import Any
 
-from .contracts import ContractError, canonical, references, resolved_bindings, resolve, validate_output, validate_workflow
+from .contracts import (ContractError, canonical, references, resolved_bindings, resolve,
+                        validate_output, validate_workflow, validate_input,
+                        validate_connections, validate_report)
 
 
 _ACTIVE = {"running", "waiting", "unknown"}
@@ -34,6 +36,7 @@ def new_run(run_id: str, workflow: dict, inputs: Any, limits: dict | None = None
         raise ContractError("run_id must be a nonempty string")
     definition = validate_workflow(workflow)
     canonical(inputs)
+    validate_connections(definition, inputs)
     if limits is not None and not isinstance(limits, dict):
         raise ContractError("limits must be an object")
     policy = deepcopy(limits or {})
@@ -173,6 +176,7 @@ def ready(state: dict) -> list[str]:
                 local_input = step["request"]["input"] if "request" in step else resolve(node["input"], state)
                 if any(not isinstance(local_input, dict) or key not in local_input for key in node.get("required_inputs", [])):
                     raise ContractError(f"{node_id}: missing required input")
+                validate_input(node, local_input)
             except ContractError as exc:
                 step.update(status="failed", error={"code": "input_resolution", "message": str(exc)})
                 _touch(state, "input_error", node_id=node_id, error=str(exc))
@@ -318,6 +322,7 @@ def report(state: dict, report_dict: dict) -> dict:
     if step["status"] not in _ACTIVE:
         return _remember_report(state, payload, {"accepted": False, "reason": "execution_finished", "node_id": node_id, "status": step["status"]})
     node = state["workflow"]["nodes"][node_id]
+    validate_report(node, payload)
     if kind == "completed":
         outcome = payload.get("outcome", "success")
         if outcome not in node["outcomes"]:
@@ -408,6 +413,7 @@ def _revise(state: dict, data: dict) -> list[str]:
     if "phase" in new_vars and (type(new_vars["phase"]) is not int or new_vars["phase"] not in {1, 2}):
         raise ContractError("variables.phase must be 1 or 2 when specified")
     canonical(new_input)
+    validate_connections(candidate, new_input)
     canonical(new_vars)
     explicit = data.get("affected", [])
     if not isinstance(explicit, list) or any(node not in old["nodes"] for node in explicit):

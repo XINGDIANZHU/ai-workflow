@@ -19,7 +19,7 @@
 | [methodology/中心方法论.md](../methodology/中心方法论.md) | `D138CF72777E54DB975A4B7DD3BA5A16E7E127D5DA332AD955A162195185F72B` |
 | [methodology/按需细则.md](../methodology/按需细则.md) | `D01DD9FAFA40B38EEA0C944BBB19B6B3C9311AC14C52A36D792557FE180DF0B9` |
 
-定义目录是项目根下的 `definitions/nodes` 与 `definitions/workflows`。加载器将 `name@1` 引用解析成固定定义与内容标识；节点实例只改变输入、依赖和路由，不覆盖节点职责、类型、版本或结果名称。规则应在实际执行 Agent 所在环境可读；异机执行需明确共享文件或映射方式，不能只传递另一台机器的路径。
+定义目录是项目根下的 `definitions/nodes` 与 `definitions/workflows`。加载器将 `name@版本` 引用解析成固定定义与内容标识；节点实例只改变输入、依赖和路由，不覆盖节点职责、类型、版本或结果名称。规则应在实际执行 Agent 所在环境可读；异机执行需明确共享文件或映射方式，不能只传递另一台机器的路径。
 
 ## 一次实际领取
 
@@ -42,7 +42,7 @@
 }
 ```
 
-节点定义规定有限结果名称。`agent.evaluate@1` 返回 `passed/replan`；`artifact.review@1` 返回 `passed/repair/replan`；不得把不认识的结果改成成功。目标待决、缺少有效答复、原因未知或必要能力不可用时，使用 `kind=waiting` 与 `waiting:{reason,question,resume_condition}`；用户答复通过 `reply` 控制送回相同执行，Agent 判断是否足够，不把任何回复自动视为批准。
+节点定义规定有限结果名称。`agent.evaluate@2` 返回 `passed/replan`；`artifact.review@2` 返回 `passed/repair/replan`；不得把不认识的结果改成成功。目标待决、缺少有效答复、原因未知或必要能力不可用时，使用 `kind=waiting` 与 `waiting:{reason,question,resume_condition}`，三项均为非空文字；用户答复通过 `reply` 控制送回相同执行，Agent 判断是否足够，不把任何回复自动视为批准。`error` 回报必须提供非空 `error.code`。
 
 控制请求先读取最新快照，带 `expected_revision`。发生冲突就重读实际状态再判断，不强行覆盖。`pause` 停止新派发；`cancel` 请求停止并继续核对在途事实，取消请求不等于外部工作已经终止。完成的运行不会被取消操作改写成另一终态。
 
@@ -56,7 +56,7 @@
 | `picture-process-review.json` | `comfy_request/criteria` | 真实图片处理后审阅已交付；图片是否通过以 `review.outcome` 为准 |
 | `existing-artifact-review.json` | `artifacts/criteria` | 对已有产物交付同一审阅节点的结论，不等于所有产物均合格 |
 
-`comfy_request` 原样交给 `comfy.operation@1`，至少包含 `url`、ComfyUI API 格式的 `workflow` 和绝对 `output_dir`。只使用本次已授权且实际可访问的本地环境；不得把此小型处理示例当作生成模型质量或所有 ComfyUI 工作流均可运行的证据。
+`comfy_request` 原样交给 `comfy.operation@2`，至少包含 `url`、ComfyUI API 格式的 `workflow` 和绝对 `output_dir`。只使用本次已授权且实际可访问的本地环境；不得把此小型处理示例当作生成模型质量或所有 ComfyUI 工作流均可运行的证据。
 
 方法论任务的主要输出约定：
 
@@ -78,7 +78,7 @@
 
 第二阶段最终审阅和交付收到 `{phase1,phase2}` 两阶段成果包，审阅条件同时含第二阶段判据和完整需求验收。第二阶段返工必须返回同形的全量 `artifacts`，保留未改成果并说明替换关系，不只返回本次修改的文件。
 
-方法论编排修订为 `version:"5"`，经验编排为 `version:"3"`；均在节点实例的 `output_contract` 声明按结果名称区分的必要输出字段、类型及非空要求。报告缺字段时拒绝推进，不占用该 `report_id`；补齐后沿原执行身份回报。验证需要成果、依据、缺陷和未验证范围，交付需要完整成果、验收、收尾及经验引用；其他节点按其契约提交可读文档与必要字段。结构通过不证明内容真实，实质质量和证据仍由主代理核验。旧运行保留原快照，不自动迁移。
+方法论编排修订为 `version:"6"`，经验编排为 `version:"4"`，其他三个内置编排为 `version:"2"`。每个新版节点自身的 `io_contract` 声明输入和全部结果分支的输出 schema，编排不覆盖契约。方案另需有序 `execution_plan`；动态任务条目须带完整 `io_contract`。报告缺字段或类型不符时拒绝推进，不占用该 `report_id`；补齐后沿原执行身份回报。验证需要成果、依据、缺陷和未验证范围，交付需要完整成果、验收、收尾及经验引用；其他节点按其契约提交可读文档与必要字段。结构通过不证明内容真实，实质质量和证据仍由主代理核验。旧版本与旧运行保留原契约，不自动迁移。字段含义、复用实例及检查边界见[节点契约](NODE_CONTRACTS.md)。
 
 ## 成果、分配与过程记录
 

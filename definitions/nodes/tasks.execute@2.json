@@ -1,0 +1,231 @@
+{
+  "id": "tasks.execute",
+  "version": "2",
+  "kind": "tasks",
+  "outcomes": [
+    "success",
+    "failed"
+  ],
+  "required_inputs": [
+    "tasks",
+    "phase",
+    "input"
+  ],
+  "cost": 0,
+  "bounded_cost": true,
+  "description": "把已定义的任务清单展开为子流程，汇总其状态、节点结果与子流程编号。",
+  "io_contract": {
+    "version": "1",
+    "input": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "agent",
+                  "program",
+                  "comfyui",
+                  "tasks",
+                  "subflow"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "input": {},
+              "depends": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                "minItems": 0,
+                "description": "有序条目"
+              },
+              "phase": {
+                "type": "integer",
+                "enum": [
+                  1,
+                  2
+                ]
+              },
+              "outcomes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "非空文字说明或标识"
+                },
+                "minItems": 1,
+                "description": "有序条目"
+              },
+              "instruction": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "io_contract": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": true,
+                "description": "结构化记录",
+                "minProperties": 1
+              }
+            },
+            "required": [
+              "kind",
+              "version",
+              "input",
+              "depends",
+              "phase",
+              "outcomes",
+              "io_contract"
+            ],
+            "additionalProperties": true,
+            "description": "完整已解析节点，含自身输入输出契约"
+          },
+          "description": "需要展开执行的任务清单，各项须具备完整节点定义。",
+          "minProperties": 1
+        },
+        "phase": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ],
+          "description": "本次要执行的阶段。"
+        },
+        "input": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true,
+          "description": "交给子流程的初始输入。"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              "status": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": true,
+            "description": "结构化记录"
+          },
+          "minItems": 0,
+          "description": "需核对并读取的规则文件及内容哈希"
+        }
+      },
+      "required": [
+        "tasks",
+        "phase",
+        "input"
+      ],
+      "additionalProperties": false,
+      "description": "本节点的局部输入；不读取其他节点的隐含状态"
+    },
+    "outputs": {
+      "success": {
+        "type": "object",
+        "properties": {
+          "child_run": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "已启动的子流程编号；无效计划未启动子流程时可为空。"
+          },
+          "status": {
+            "const": "succeeded",
+            "description": "子流程的实际终态。"
+          },
+          "steps": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true,
+            "description": "子流程各节点的状态与结果汇总。"
+          }
+        },
+        "required": [
+          "child_run",
+          "status",
+          "steps"
+        ],
+        "additionalProperties": true,
+        "description": "结构化记录"
+      },
+      "failed": {
+        "type": "object",
+        "properties": {
+          "child_run": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "非空文字说明或标识"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "已启动的子流程编号；无效计划未启动子流程时可为空。"
+          },
+          "status": {
+            "const": "failed",
+            "description": "子流程的实际终态。"
+          },
+          "steps": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true,
+            "description": "子流程各节点的状态与结果汇总。"
+          }
+        },
+        "required": [
+          "child_run",
+          "status",
+          "steps"
+        ],
+        "additionalProperties": true,
+        "description": "结构化记录"
+      }
+    }
+  },
+  "title": "执行任务清单"
+}

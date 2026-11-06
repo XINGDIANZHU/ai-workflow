@@ -94,7 +94,8 @@ def http(project):
     assets = project / "assets"
     assets.mkdir()
     for name, text in (("index.html", "<!doctype html><title>中文工作台</title>"),
-                       ("app.js", "document.title = '工作台';"), ("style.css", "body {color:black}")):
+                       ("app.js", "document.title = '工作台';"), ("graph-editor.js", "window.WorkflowGraph = {};"),
+                       ("style.css", "body {color:black}")):
         (assets / name).write_text(text, encoding="utf-8")
     fake = FakeClient()
     app = web.Workbench(project, fake, overview_workers=3)
@@ -397,6 +398,7 @@ def test_only_named_static_assets_are_served_and_unknown_routes_are_404(http, pr
     assert "script-src 'self';" in response.headers["content-security-policy"]
     assert "style-src 'self' 'unsafe-inline';" in response.headers["content-security-policy"]
     assert client.head("/app.js").status_code == 200
+    assert client.get("/graph-editor.js").headers["content-type"].startswith("text/javascript")
     assert client.get("/style.css").headers["content-type"].startswith("text/css")
     (project / "secret.txt").write_text("do not expose", encoding="utf-8")
     for path in ("/secret.txt", "/%2e%2e/secret.txt", "/api/no-such-api", "/definitions/workflows/example.json"):

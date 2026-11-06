@@ -17,7 +17,7 @@ from urllib.parse import quote, unquote, urlsplit
 import httpx
 
 from .client import Client, readable
-from .contracts import canonical, validate_workflow
+from .contracts import canonical, validate_workflow, validate_connections
 from .loader import load_workflow
 from .inspection import inspect_run, summarize
 from .artifacts import read_artifact
@@ -219,6 +219,10 @@ class Workbench:
             run_id = _text(data.get("run_id"), "run_id")
             workflow = self.expand(data.get("workflow"))
             limits = _object(data.get("limits", {}), "limits")
+            try:
+                validate_connections(workflow, data.get("input", {}))
+            except ValueError as exc:
+                raise WebAPIError(400, "任务输入不符合节点契约", str(exc)) from exc
             return self._call("start", run_id, workflow, data.get("input", {}), limits)
         if path == "/api/backlog":
             action = data.get("action")
@@ -353,7 +357,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                                   headers={"Content-Disposition": "attachment; filename=workflow.md; filename*=UTF-8''" + quote(run_id + ".md", safe="")})
             return self._send(200, state)
         assets = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),
-                  "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css")}
+                  "/app.js": ("app.js", "text/javascript"), "/graph-editor.js": ("graph-editor.js", "text/javascript"),
+                  "/style.css": ("style.css", "text/css")}
         if path not in assets:
             raise WebAPIError(404, "页面或接口不存在")
         name, mime = assets[path]
