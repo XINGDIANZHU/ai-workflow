@@ -211,6 +211,8 @@ class Workbench:
         return record, raw, media_type
 
     def post(self, path, data):
+        if path == "/api/settings":
+            return self._call("task_settings", _text(data.get("default_task_root"), "默认任务目录"))
         if path == "/api/validate":
             return {"valid": True, "workflow": self.expand(data.get("workflow"))}
         if path == "/api/workflows":
@@ -320,6 +322,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         app = self.server.app
         if path == "/api/catalog":
             return self._send(200, app.catalog())
+        if path == "/api/settings":
+            return self._send(200, app._call("task_settings"))
         if path == "/api/overview":
             return self._send(200, app.overview())
         match = re.fullmatch(r"/api/runs/([^/]+)/inspection", path)

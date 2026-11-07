@@ -331,6 +331,7 @@ function renderTaskDetail() {
   const graphPanel = el("section",{class:"panel"},
     el("div",{class:"detail-heading"},el("div",{},el("div",{class:"detail-title-row"},el("h2",{},inspection?.title || summary?.title || workflowTitle(run.workflow)),badge(run.status)),el("div",{class:"detail-meta"},el("span",{},inspection?.workflow_title || workflowTitle(run.workflow)),el("span",{class:"mono"},run.run_id),el("span",{},`修订 ${revision}`),el("span",{},`流程 v${run.workflow.version}`),run.parent?.run_id && el("a",{href:`#tasks/${encodeURIComponent(run.parent.run_id)}`},"↰ 返回父任务")),el("div",{class:"detail-meta"},el("span",{},`开始 ${dateLabel(inspection?.created_at)}`),el("span",{},`最近更新 ${dateLabel(inspection?.updated_at)}`),inspection?.phase!=null&&el("span",{},`阶段 ${inspection.phase}`)))),
     el("div",{class:"task-request"},el("strong",{},"任务需求"),el("p",{},summaryText(inspection?.request ?? run.input?.request ?? run.input))),
+    el("div",{class:"task-request"},el("strong",{},"任务目录"),el("p",{class:"mono"},run.workspace?.path || "旧任务未分配目录；保留原工作位置"),run.workspace && el("p",{class:"field-hint"},"领取和换对话续接使用此目录。成果回报后可在下方查看固定版本。")),
     summary?.current_nodes?.length ? el("div",{class:"current-work"},el("strong",{},"当前工作"),...summary.current_nodes.map(n=>el("div",{},button(inspectionNodeTitle(run,n),()=>selectNode(n.node_id),"text-button"),badge(n.status),n.owner&&el("span",{},`执行者 ${n.owner}`),n.progress&&el("span",{},summaryText(n.progress)),n.blocker&&el("span",{class:"current-blocker"},`阻塞：${display(n.blocker)}`)))) : null,
     el("div",{class:"detail-toolbar"},run.status === "paused" ? button("继续执行",()=>controlRun(run,"resume",{}),"primary small") : button("暂停",()=>controlRun(run,"pause",{}),"small",terminal),button("取消任务",()=>openCancel(run),"small danger",terminal),el("a",{class:"button small push",href:`/api/runs/${encodeURIComponent(run.run_id)}/export`,download:""},"导出快照")),
     notices.length ? el("div",{class:"detail-notices"},...notices) : null,
@@ -742,6 +743,22 @@ function openAddBacklog() {
   });
 }
 
+async function openTaskSettings() {
+  try {
+    const settings=await api('/api/settings');
+    showDialog('默认任务目录','新任务在此创建独立目录；修改后已有任务仍使用原目录。',body=>{
+      const path=el('input',{value:settings.default_task_root,required:true,'aria-label':'默认任务目录',placeholder:'填写绝对路径'});
+      const err=el('div',{hidden:true});
+      body.append(el('form',{class:'form-section',onsubmit:async e=>{
+        e.preventDefault();
+        try { await api('/api/settings',{default_task_root:path.value.trim()});dialog.close();toast('默认任务目录已保存。'); }
+        catch(error){showError(error,err);}
+      }},field('默认任务目录',path,'服务需要能够读写该目录。'),err,el('div',{class:'form-actions'},button('返回',()=>dialog.close()),el('button',{type:'submit',class:'button primary'},'保存目录'))));
+    });
+  } catch(error){showError(error);}
+}
+
+$("#task-settings").addEventListener("click",openTaskSettings);
 $("#refresh").addEventListener("click",refreshAll);
 $("#new-run").addEventListener("click",()=>openStart());
 window.addEventListener("hashchange",navigate);

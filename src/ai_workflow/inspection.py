@@ -76,6 +76,7 @@ def summarize(state):
     meta = inputs.get("_meta", {}) if isinstance(inputs, dict) else {}
     purpose = meta.get("purpose", "unknown") if isinstance(meta, dict) else "unknown"
     return {"run_id": state.get("run_id"), "root": state.get("root", state.get("run_id")),
+            "workspace": deepcopy(state.get("workspace")),
             "status": state.get("status"), "revision": state.get("revision"), "title": _title(state),
             "workflow_id": workflow.get("id", ""), "workflow_title": workflow.get("title") or workflow.get("id", ""),
             "total": len(steps), "completed": sum(s.get("status") == "completed" for s in steps.values()),

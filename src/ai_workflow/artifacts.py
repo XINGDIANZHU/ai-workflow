@@ -148,7 +148,7 @@ def inspect_artifact(root, record):
     return result
 
 
-def capture_report(root, run_id, report, node=None):
+def capture_report(root, run_id, report, node=None, workspace=None):
     """Read and pin declared outputs once inside a durable execution step.
 
     New nodes may require file outputs via artifact_fields; old contracts remain
@@ -165,6 +165,9 @@ def capture_report(root, run_id, report, node=None):
     receipts = []
     for candidate in candidates:
         location = candidate.pop("_location")
+        value = candidate["path"].replace("\\", "/")
+        if workspace and not candidate.get("snapshot") and not (Path(value).is_absolute() or re.match(r"^[A-Za-z]:/", value) or "://" in value):
+            candidate["path"] = workspace["path"].rstrip("/") + "/" + value
         origin = candidate.get("origin")
         if not origin and candidate.get("artifact_id"):
             origin = {k: candidate.get(k) for k in ("run_id", "node_id", "execution_id", "attempt", "artifact_id")}

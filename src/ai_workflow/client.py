@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 import httpx
+from concurrent.futures import ThreadPoolExecutor
 from .loader import load_workflow
 from .contracts import validate_workflow, validate_connections
 
@@ -44,6 +45,31 @@ class Client:
 
     def backlog(self, action, data):
         return self.call("WorkflowHub", "local", "change", {"action": "backlog_" + action, "data": data})
+
+    def task_settings(self, default_task_root=None):
+        data = {} if default_task_root is None else {"default_task_root": default_task_root}
+        return self.call("WorkflowHub", "local", "change", {"action": "task_settings", "data": data})
+
+    def overview(self, query=None, unfinished_only=False, directory=None):
+        from .inspection import summarize
+        from .workspaces import contains
+        ledger = self.ledger()
+        def inspect(run_id):
+            try:
+                return summarize(self.read(run_id))
+            except (httpx.HTTPError, ValueError) as exc:
+                return {"run_id": run_id, "error": str(exc)}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            snapshots = list(pool.map(inspect, ledger.get("runs", {})))
+        tasks = [item for item in snapshots if "error" not in item]
+        if unfinished_only:
+            tasks = [item for item in tasks if item['status'] not in ('succeeded', 'cancelled')]
+        if query:
+            tasks = [item for item in tasks if query.casefold() in
+                     ' '.join(str(item.get(k, '')) for k in ('run_id', 'title', 'workflow_id')).casefold()]
+        if directory:
+            tasks = [item for item in tasks if contains(item.get('workspace') or {}, directory)]
+        return {**ledger, 'tasks': tasks, 'errors': [item for item in snapshots if 'error' in item]}
 
 
 def readable(state):

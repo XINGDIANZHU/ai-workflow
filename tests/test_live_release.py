@@ -4,6 +4,7 @@ Agent reasoning is a fixture; actual processes, files, MCP and durable state are
 Set WORKFLOW_LIVE=1. WORKFLOW_CRASH=1 additionally restarts this checkout's backend.
 """
 import asyncio
+from contextlib import asynccontextmanager
 from copy import deepcopy
 import json
 import os
@@ -122,6 +123,149 @@ def test_mcp_onboarding_start_claim_wait_reply_and_report():
                                    data={'expected_revision': state['revision']})
 
     asyncio.run(check())
+
+
+def test_task_directories_survive_new_mcp_session_and_show_archived_outputs():
+    client = Client()
+    rid = 'workspace-' + uuid.uuid4().hex[:8]
+    folder = ROOT / '.local/evidence' / rid
+    folder.mkdir(parents=True)
+    root_a, root_b = folder / '任务目录 A', folder / '任务目录 B'
+    node = {'kind': 'agent', 'version': '1', 'instruction': '在任务目录写一份验收文档并交付。',
+            'outcomes': ['success'], 'artifact_fields': ['documents'], 'input': {},
+            'io_contract': {'version': '1', 'input': {'type': 'object'}, 'outputs': {'success': {
+                'type': 'object', 'properties': {'documents': {'type': 'array', 'minItems': 1,
+                'items': {'type': ['string', 'object']}}}, 'required': ['documents']}}}}
+    flow = {'id': 'workspace-acceptance', 'version': '1', 'nodes': {
+        'draft': node, 'subtask': {'kind': 'subflow', 'version': '1', 'depends': ['draft'], 'input': {
+            'workflow': {'id': 'workspace-child', 'version': '1', 'nodes': {'write': node}},
+            'input': {'source': {'$ref': 'steps.draft.output'}}}}}}
+    flowfile = folder / 'workflow.json'
+    flowfile.write_text(json.dumps(flow, ensure_ascii=False), encoding='utf-8')
+    old_settings = client.task_settings()
+    runs = []
+
+    @asynccontextmanager
+    async def connection():
+        params = StdioServerParameters(command=sys.executable, args=['-X', 'utf8', '-m', 'ai_workflow.mcp_server'],
+            cwd=str(ROOT.parent), env={**os.environ, 'AI_WORKFLOW_HOME': str(ROOT), 'AI_WORKFLOW_URL': client.url})
+        async with stdio_client(params) as (reader, writer):
+            async with ClientSession(reader, writer) as session:
+                await session.initialize()
+                async def call(name, **arguments):
+                    return payload(await session.call_tool(name, arguments))
+                yield call
+
+    async def claimed(call, run_id, actor):
+        for _ in range(150):
+            result = await call('workflow_claim', run_id=run_id, worker_id=actor)
+            if result['jobs']:
+                return result['jobs'][0]
+            await asyncio.sleep(.1)
+        raise AssertionError('No task claimed')
+
+    async def check():
+        async with connection() as call:
+            await call('workflow_settings', default_task_root=str(root_a))
+            inputs = {'title': '跨会话目录验收 ' + rid, '_meta': {'purpose': 'test'}}
+            started = await call('workflow_start', run_id=rid, workflow_path=str(flowfile),
+                                 inputs=inputs, explicit_start=True)
+            runs.append(rid)
+            taskdir = Path(started['workspace']['path'])
+            assert taskdir.parent == root_a and taskdir.is_dir()
+            assert json.loads((taskdir / '.workflow-task.json').read_text(encoding='utf-8'))['run_id'] == rid
+            first = await claimed(call, rid, 'workspace-session-A')
+            assert first['workspace'] == started['workspace']
+            document = taskdir / '成果.md'
+            document.write_text('# 会话 A 草稿\n\n给下个会话继续。', encoding='utf-8')
+            await call('workflow_report', run_id=rid, report={
+                **first['report_template'], 'report_id': rid + ':waiting', 'kind': 'waiting',
+                'waiting': {'reason': '换会话验收', 'question': '测试预设：交给会话 B 继续？', 'resume_condition': '收到测试答复'}})
+            await call('workflow_settings', default_task_root=str(root_b))
+            replayed = await call('workflow_start', run_id=rid, workflow_path=str(flowfile),
+                                  inputs=inputs, explicit_start=True)
+            assert replayed['workspace'] == started['workspace'] and replayed['replayed']
+            other = await call('workflow_start', run_id=rid + '-other',
+                               workflow_path='definitions/workflows/existing-artifact-review.json',
+                               inputs={'artifacts': 'test', 'criteria': 'test', '_meta': {'purpose': 'test'}}, explicit_start=True)
+            runs.append(rid + '-other')
+            assert Path(other['workspace']['path']).parent == root_b
+        # A really closed stdio session; B discovers authoritative state without A's local context.
+        async with connection() as call:
+            found = await call('workflow_overview', query='跨会话目录验收 ' + rid, unfinished_only=True)
+            assert [t['run_id'] for t in found['tasks']] == [rid]
+            by_directory = await call('workflow_overview', directory=str(document), unfinished_only=True)
+            assert [t['run_id'] for t in by_directory['tasks']] == [rid]
+            assert found['tasks'][0]['workspace'] == started['workspace']
+            assert not (await call('workflow_claim', run_id=rid, worker_id='workspace-session-B'))['jobs']
+            state = await call('workflow_read', run_id=rid)
+            await call('workflow_control', run_id=rid, action='handoff', data={
+                'expected_revision': state['revision'], 'old_worker': 'workspace-session-A',
+                'new_worker': 'workspace-session-B', 'old_stopped': True})
+            state = await call('workflow_read', run_id=rid)
+            await call('workflow_control', run_id=rid, action='reply', data={
+                'expected_revision': state['revision'], 'node_id': 'draft', 'reply': '测试预设：继续'})
+            resumed = await claimed(call, rid, 'workspace-session-B')
+            assert resumed['execution_id'] == first['execution_id'] and resumed['attempt'] == first['attempt']
+            assert resumed['workspace'] == started['workspace']
+            assert document.read_text(encoding='utf-8').startswith('# 会话 A 草稿')
+            original = '# 任务目录验收成果\n\n会话 B 沿用会话 A 的目录和执行身份，实际完成文档。'
+            document.write_text(original, encoding='utf-8', newline='')
+            await call('workflow_report', run_id=rid, report={**resumed['report_template'],
+                       'outcome': 'success', 'output': {'documents': ['成果.md']}})
+            for _ in range(150):
+                state = await call('workflow_read', run_id=rid)
+                child = next((j['child_run'] for j in state['requests'].values() if j.get('child_run')), None)
+                if child:
+                    break
+                await asyncio.sleep(.1)
+            assert child
+            runs.append(child)
+            job = await claimed(call, child, 'workspace-child-agent')
+            childdir = Path(job['workspace']['path'])
+            assert childdir.parent == taskdir / 'subtasks'  # Never the newly configured root B.
+            (childdir / '子任务成果.md').write_text('# 子任务成果\n\n独立子目录中的真实文件。', encoding='utf-8')
+            await call('workflow_report', run_id=child, report={**job['report_template'],
+                       'outcome': 'success', 'output': {'documents': ['子任务成果.md']}})
+            for _ in range(150):
+                state = await call('workflow_read', run_id=rid)
+                if state['status'] == 'succeeded':
+                    break
+                await asyncio.sleep(.1)
+            assert state['status'] == 'succeeded'
+            assert any(h['event'] == 'handoff' for h in state['history'])
+            assert not (await call('workflow_overview', query='跨会话目录验收 ' + rid, unfinished_only=True))['tasks']
+            document.write_text('交付后的修改；不能覆盖已归档版本。', encoding='utf-8')
+            with httpx.Client(base_url=WEB, timeout=30, trust_env=False) as web:
+                inspection = web.get(f'/api/runs/{rid}/inspection').json()
+                assert inspection['workspace'] == started['workspace']
+                receipt = next(a for a in inspection['artifacts'] if a['node_id'] == 'draft')
+                preview = web.get(f"/api/runs/{rid}/artifacts/{receipt['artifact_id']}")
+                preview.raise_for_status()
+                assert preview.json()['text'] == original
+                assert any(a['node_id'] == 'subtask' and a['status'] == 'archived' for a in inspection['artifacts'])
+            (folder.parent / 'workspace-latest.json').write_text(json.dumps({
+                'run_id': rid, 'child_run': child, 'workspace': started['workspace'],
+                'artifact_id': receipt['artifact_id'], 'status': state['status'],
+                'checks': ['custom default roots', 'idempotent start', 'separate MCP sessions',
+                           'discovery by title and directory', 'no stealing', 'same execution handoff',
+                           'parent-pinned child directory', 'relative output', 'immutable web preview']},
+                ensure_ascii=False, indent=2), encoding='utf-8')
+
+    try:
+        asyncio.run(check())
+    finally:
+        client.task_settings(old_settings['default_task_root'])
+        for run in reversed(runs):
+            state = client.read(run)
+            if state['status'] not in ('succeeded', 'failed', 'cancelled'):
+                client.control(run, 'cancel', {'expected_revision': state['revision']})
+                for job in state['requests'].values():
+                    step = state['steps'][job['node_id']]
+                    if step['status'] in ('running', 'waiting') and job['kind'] == 'agent':
+                        client.report(run, {'report_id': job['execution_id'] + ':cleanup',
+                            'execution_id': job['execution_id'], 'attempt': job['attempt'], 'kind': 'error',
+                            'error': {'code': 'cancelled', 'detail': 'Stopped deterministic test fixture'}})
 
 
 def test_full_methodology_documents_controls_recovery_and_mcp():
@@ -260,7 +404,7 @@ def test_full_methodology_documents_controls_recovery_and_mcp():
                         await session.initialize()
                         listed = await session.list_tools()
                         assert {'workflow_guide', 'workflow_start', 'workflow_claim', 'workflow_report',
-                                'workflow_read', 'workflow_control', 'workflow_overview', 'experience_item'} <= {t.name for t in listed.tools}
+                                'workflow_read', 'workflow_control', 'workflow_overview', 'workflow_settings', 'experience_item'} <= {t.name for t in listed.tools}
                         result = await session.call_tool('workflow_read', {'run_id': rid})
                         assert not result.isError
                         data = result.structuredContent or json.loads(next(c.text for c in result.content if c.type == 'text'))

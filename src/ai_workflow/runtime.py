@@ -9,6 +9,7 @@ from restate.exceptions import TerminalError
 from . import engine, ledger
 from .artifacts import capture_report
 from .settings import project_root
+from . import workspaces
 
 hub = restate.VirtualObject("WorkflowHub")
 runs = restate.VirtualObject("WorkflowRun")
@@ -24,7 +25,19 @@ async def change(ctx: restate.ObjectContext, command: dict) -> dict:
     state = await ctx.get("state") or ledger.empty()
     try:
         action, data = command["action"], command.get("data", {})
-        if action == "register":
+        if action == "task_settings":
+            if "default_task_root" in data:
+                def configure():
+                    try:
+                        return {"settings": workspaces.validate_root(data["default_task_root"])}
+                    except (OSError, ValueError) as exc:
+                        return {"error": str(exc)}
+                configured = await ctx.run("configure-task-root", configure, max_attempts=1)
+                if "error" in configured:
+                    raise ValueError(configured["error"])
+                state["task_settings"] = configured["settings"]
+            result = state.get("task_settings") or workspaces.default_settings()
+        elif action == "register":
             result = ledger.register(state, **data)
         elif action == "admit":
             result = ledger.admit(state, data)
@@ -76,7 +89,7 @@ async def start(ctx: restate.ObjectContext, request: dict) -> dict:
     if old:
         if old["start_hash"] != fingerprint:
             raise TerminalError("run identity reused with different request", status_code=409)
-        return {"run_id": ctx.key(), "status": old["status"], "replayed": True}
+        return {"run_id": ctx.key(), "status": old["status"], "replayed": True, "workspace": old.get("workspace")}
     if request.get("explicit_start") is not True:
         raise TerminalError("explicit workflow activation is required", status_code=400)
     try:
@@ -87,11 +100,22 @@ async def start(ctx: restate.ObjectContext, request: dict) -> dict:
     state.update(start_hash=fingerprint, requests={}, assignments={}, admission={},
                  input_sources=deepcopy(request.get("input_sources", [])),
                  root=request.get("root", ctx.key()), parent=request.get("parent"))
+    settings = await update_hub(ctx, "task_settings", {})
+    def create_workspace():
+        try:
+            return {"workspace": workspaces.allocate(ctx.key(), state["root"], settings,
+                                                      request.get("parent_workspace"))}
+        except (OSError, ValueError) as exc:
+            return {"error": str(exc)}
+    allocated = await ctx.run("create-task-workspace", create_workspace, max_attempts=1)
+    if "error" in allocated:
+        raise TerminalError("无法创建任务目录：" + allocated["error"], status_code=409)
+    state["workspace"] = allocated["workspace"]
     await update_hub(ctx, "register", {"run_id": ctx.key(), "root": state["root"],
                                        "limits": state.get("limits", {})})
     await save_run(ctx, state, -1)
     ctx.object_send(tick, key=ctx.key(), arg=None)
-    return {"run_id": ctx.key(), "status": state["status"]}
+    return {"run_id": ctx.key(), "status": state["status"], "workspace": state["workspace"]}
 
 
 @runs.handler(kind="shared")
@@ -181,6 +205,7 @@ async def tick(ctx: restate.ObjectContext) -> dict:
                                       for source in request.get("input_sources", [])
                                       if source.get("input_path", [])[:1] == ["input"]],
                     "root": state["root"], "limits": state.get("limits", {}),
+                    "parent_workspace": state.get("workspace"),
                     "parent": {"run_id": ctx.key(), "execution_id": request["execution_id"],
                                "attempt": request["attempt"],
                                "failure_outcome": "failed" if "failed" in request["node_spec"]["outcomes"] else None}})
@@ -237,9 +262,9 @@ async def claim(ctx: restate.ObjectContext, request: dict) -> dict:
                 "worker_id": worker, "execution_id": job["execution_id"], "attempt": job["attempt"],
                 "revision": state["revision"]})
         jobs.append({**job, "step_status": step["status"], "reply": step.get("reply"),
-                     "run_status": state["status"], "worker_id": worker})
+                     "run_status": state["status"], "worker_id": worker, "workspace": state.get("workspace")})
     await save_run(ctx, state, since)
-    return {"run_id": ctx.key(), "status": state["status"], "jobs": jobs}
+    return {"run_id": ctx.key(), "status": state["status"], "workspace": state.get("workspace"), "jobs": jobs}
 
 
 @runs.handler()
@@ -264,7 +289,7 @@ async def receive(ctx: restate.ObjectContext, report: dict) -> dict:
             node = {**state["workflow"]["nodes"][trial["node_id"]], "node_id": trial["node_id"]}
             def capture():
                 try:
-                    return {"report": capture_report(project_root(), ctx.key(), report, node)}
+                    return {"report": capture_report(project_root(), ctx.key(), report, node, state.get("workspace"))}
                 except (OSError, ValueError) as exc:
                     return {"error": str(exc)}
             captured = await ctx.run("capture-artifacts", capture, max_attempts=1)

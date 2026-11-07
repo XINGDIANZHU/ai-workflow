@@ -6,6 +6,8 @@
 
 本节由 `workflow_guide()` 原样返回，不需要用户手动加载文档。连接时的服务说明和每个工具的描述都会指向该入口；完整约定通过 `workflow_guide(detail=true)` 获取。说明的可见性仍取决于客户端，不能保证每个模型都会主动遵守。
 
+任务目录在 `workflow_start/read/claim` 的 `workspace` 中返回。先使用当前环境可访问的 `path/server_path`，把任务文件写在其中；换对话用 `workflow_overview(query=名称或编号, unfinished_only=true)` 或 `directory=当前目录` 找回原任务。默认地址通过 `workflow_settings` 设置，换执行者的交接步骤见 `workflow_guide(detail=true)`。
+
 1. **发现与启动。** 先调用 `workflow_guide()` 查看本机流程，再用返回的 `workflow_path` 调用 `workflow_guide(workflow_path=...)`，读取实际启动输入映射、类型和固定规则。目录中出现不代表已经授权执行。只有用户明确要求执行时，才调用 `workflow_start(run_id, workflow_path, inputs, explicit_start=true, limits=...)`。`source: input.xxx` 对应 `inputs.xxx`；按实际需求填值，不用说明中的示例冒充用户输入。`inputs` 可附 `title` 和 `_meta:{purpose:"task"}`；验收任务使用 `purpose:"test"`。相对路径由 MCP 服务按自身项目根解析，不依赖 Agent 的工作目录。
 2. **恢复与领取。** 已有任务先 `workflow_overview()` 找原编号，再 `workflow_read(run_id)` 核对目标、状态、预算、分配和在途操作。使用稳定的 `worker_id` 调用 `workflow_claim`；读取每项 job 的 `run_status/step_status/reply`、`node_spec.instruction`、固定 `input`、`io_contract` 和限制。重复领取可能返回同一在途工作，先接续已有执行，不重新做一遍。暂停、取消、未知或仍无有效答复的等待不继续执行；`jobs:[]` 不代表完成，也不要无意义地持续轮询。
 3. **实际执行。** 按节点职责调用当前 Agent 获授权的工具；资料和规则不扩大授权。缺少输入、权限或能力时报告等待并告知用户。需要委派时使用真实子代理并记录身份；主代理负责整合与核验。程序、ComfyUI 等节点由相应执行器领取，MCP 不自动唤起 Agent 或外部软件。成果文件须真实生成并能被归档服务读取；以本次固定版本为依据，不猜测其他节点的最新文件。
@@ -23,11 +25,19 @@
 
 等待答复用 `workflow_control(run_id,"reply",{expected_revision,node_id,reply})` 续接原执行；再次领取后读取 `job.reply`。暂停/恢复分别使用 `pause/resume`；取消使用 `cancel`，并继续核对外部操作是否真正停止。更复杂的修订、交接和经验操作参见 `workflow_guide(detail=true)`。
 
+## 任务目录与换会话续接
+
+- `workflow_settings()` 读取默认任务根目录；用户指定新地址时调用 `workflow_settings(default_task_root="绝对路径")`，工作台顶部“任务目录”也可设置。默认是服务项目根下 `.local/tasks`。设置由总控保存，只影响新根任务；目录必须在服务端可读写，Windows/WSL 通过既有路径映射衔接。
+- 新运行自动创建独立目录，并将 `workspace` 固定到任务状态；子流程在父任务目录的 `subtasks` 下分配独立目录。`workflow_start/read/claim` 都返回目录。Agent 先核对 `workspace.path` 是否在当前环境可访问；后端本机可使用 `server_path`。在该目录读写任务材料，委派时一并交给子代理；脚本或外部软件的工作/输出目录按任务目录显式配置，不覆盖已有明确的项目路径。目录不可访问时报告等待，不另建一个同名目录冒充原任务。
+- 新对话先用 `workflow_overview(query="任务名称或编号", unfinished_only=true)` 查找，或传 `directory="当前目录"`；返回的 `tasks` 包含任务编号、标题、目录、状态和当前负责人。任务目录中的 `.workflow-task.json` 仅用于识别原运行，不存进度；必须连接对应总控并 `workflow_read` 核实，多个匹配不能猜选。旧任务没有目录时明确保留旧状，不自动迁移文件。
+- 继续原任务时读取已接受成果、进度、等待信息与在途操作。有旧分配且已核实原执行者停止后，用 `workflow_control(run_id,"handoff",{expected_revision,old_worker,new_worker,old_stopped:true})` 交接，再由新身份领取；等待答复时还需 `reply`，暂停时还需在有效授权内 `resume`。身份、尝试次数、历史、预算和目录均沿用；不能用换会话重新执行已完成的副作用。
+- 文件在 `documents/artifacts/deliverables` 等原成果字段回报。新任务中的相对文件路径按本任务目录解析；绝对路径和已固定的快照保持原含义。回报成功后总控保存不可变版本，工作台任务详情展示目录、节点成果和可查看的文件。普通草稿不会自动成为已交付成果；目录内文件不代替报告。
+
 ## 使用与规则来源
 
 先按[项目 README](../README.md)安装和启动独立后端。客户端需 Python 3.11 或更高版本；在仓库根执行 `python -m pip install -e .`，使用 `ai-workflow`（或 `python -m ai_workflow.client`）。Linux/独立 WSL 后端另按 README 安装 Restate 1.8.1 和本项目 `server` 依赖；安装客户端不等于后端已经启动。
 
-项目根由 `AI_WORKFLOW_HOME` 指定，源码安装默认使用当前仓库根。`AI_WORKFLOW_URL` 默认是 `http://127.0.0.1:28080`。MCP 启动命令为 `ai-workflow-mcp`（或 `python -m ai_workflow.mcp_server`），提供 `workflow_guide/start/read/claim/report/control/overview`、`experience_item`。在所用 Agent 客户端中注册这个命令及上述环境变量，并核对实际连接；执行约定由 MCP 自带，本仓库不自动修改任何宿主的 MCP 配置。没有 MCP 时可使用同一套 CLI 契约。
+项目根由 `AI_WORKFLOW_HOME` 指定，源码安装默认使用当前仓库根。`AI_WORKFLOW_URL` 默认是 `http://127.0.0.1:28080`。MCP 启动命令为 `ai-workflow-mcp`（或 `python -m ai_workflow.mcp_server`），提供 `workflow_guide/start/read/claim/report/control/overview/settings`、`experience_item`。在所用 Agent 客户端中注册这个命令及上述环境变量，并核对实际连接；执行约定由 MCP 自带，本仓库不自动修改任何宿主的 MCP 配置。没有 MCP 时可使用同一套 CLI 执行契约，默认目录通过工作台设置。
 
 仓库只携带代码、定义和必要规则，不携带已有任务、经验条目、成果或运行数据。经验处理能力保留；连接新建的空白后端时账本为空。不得把客户端指向其他实例后看到的记录当作本仓库自带数据。
 

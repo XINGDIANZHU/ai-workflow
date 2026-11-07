@@ -12,8 +12,11 @@ from .loader import load_workflow
 
 INSTRUCTIONS = """这是工作流总控 MCP。首次使用先调用 workflow_guide 获取执行约定和可用流程，
 无需让用户手动加载接入文档。只有用户明确要求执行流程时才 workflow_start；讨论和接入本身不授权启动。
-恢复任务先 workflow_overview / workflow_read 找到原运行，再 workflow_claim 领取，
+恢复任务先 workflow_overview(query=名称或编号, unfinished_only=true) / workflow_read 找到原运行；
+知道工作目录时可传 directory 筛选，匹配多项须明确选择，不另建重复任务。再 workflow_claim 领取，
 按 job.node_spec.instruction、固定 input 和 io_contract 实际工作，通过 workflow_report 回报。
+在 job.workspace.path（后端本机可用 server_path）中工作；默认根目录通过 workflow_settings 设置。
+跨会话保留原任务目录，已有分配先核实原执行者停止并 handoff，不能抢占仍在执行的任务。
 回报接受后继续读取/领取，直到完成、需要用户答复或受限；jobs 为空不代表完成。
 保留 run_id、worker_id、execution_id、attempt 和报告身份，不复制在途操作、不绕过授权与预算。
 缺信息或能力报告 waiting；遵守暂停/取消；工具成功不等于成果合格。后台不会自动唤起 Agent。
@@ -123,6 +126,7 @@ def workflow_claim(run_id: str, worker_id: str) -> dict:
     先核对 job.run_status/step_status/reply，再按 node_spec.instruction、input、io_contract 执行。
     report_template 仅预填身份，必须据实际成果补齐 outcome/output 后 workflow_report；不能直接提交空模板。
     重复领取会返回同一在途任务，先核对已有工作。暂停/等待/未知时按约定处理；jobs 为空先 workflow_read。
+    workspace 给出任务目录；切换到当前环境可访问的 path/server_path 再工作，不因默认目录变化重新建目录。
     """
     result = Client().claim(run_id, worker_id)
     result = {**result, "jobs": [dict(job) for job in result["jobs"]]}
@@ -156,11 +160,22 @@ def workflow_control(run_id: str, action: str, data: dict) -> dict:
 
 
 @mcp.tool()
-def workflow_overview() -> dict:
-    """只读列出原任务登记、预算/资源和经验待办，供发现与恢复；具体状态再 workflow_read。
+def workflow_overview(query: str | None = None, unfinished_only: bool = False, directory: str | None = None) -> dict:
+    """只读发现原任务。tasks 含名称、状态、当前节点/负责人及工作目录，runs 保留原登记表。
+    query 按名称/编号/流程搜索，unfinished_only 排除成功和取消，directory 匹配任务目录或其内部目录。
+    多个结果须结合需求明确选择；先 workflow_read，原执行者已停止才通过 handoff 接管，不另建重复运行。
     首次使用或查询可用流程定义，请 workflow_guide；本工具不会启动或领取任务。
     """
-    return Client().ledger()
+    return Client().overview(query, unfinished_only, directory)
+
+
+@mcp.tool()
+def workflow_settings(default_task_root: str | None = None) -> dict:
+    """读取默认任务目录；用户要求修改时传绝对路径 default_task_root，创建并检查后端可写性。
+    只影响随后创建的根任务，已有任务及其子流程保留原目录。首次使用先 workflow_guide。
+    用户未指定时使用服务项目根下 .local/tasks；路径必须在后端可访问，跨系统需配置共享路径映射。
+    """
+    return Client().task_settings(default_task_root)
 
 
 @mcp.tool()
