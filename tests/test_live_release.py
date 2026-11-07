@@ -22,6 +22,7 @@ from ai_workflow.client import Client
 from ai_workflow.bridge import JobStore
 from ai_workflow.worker import cycle
 from test_definitions import fixture_output
+from test_mcp_server import payload
 
 pytestmark = pytest.mark.skipif(os.getenv('WORKFLOW_LIVE') != '1', reason='opt-in real backend acceptance')
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +37,91 @@ def wait(call, timeout=25):
             return result
         time.sleep(.1)
     raise AssertionError('transition was not observed')
+
+
+def test_mcp_onboarding_start_claim_wait_reply_and_report():
+    """Use only MCP to discover and execute a labelled, deterministic review fixture."""
+    client = Client()
+    rid = 'mcp-onboard-' + uuid.uuid4().hex[:8]
+    actor = 'mcp-onboarding-fixture'
+
+    async def check():
+        params = StdioServerParameters(command=sys.executable, args=['-X', 'utf8', '-m', 'ai_workflow.mcp_server'],
+            cwd=str(ROOT.parent), env={**os.environ, 'AI_WORKFLOW_HOME': str(ROOT), 'AI_WORKFLOW_URL': client.url})
+        async with stdio_client(params) as (reader, writer):
+            async with ClientSession(reader, writer) as session:
+                async def call(name, **arguments):
+                    return payload(await session.call_tool(name, arguments))
+
+                async def claim():
+                    end = time.monotonic() + 20
+                    while time.monotonic() < end:
+                        result = await call('workflow_claim', run_id=rid, worker_id=actor)
+                        if result['jobs']:
+                            return result['jobs'][0]
+                        await asyncio.sleep(.1)
+                    raise AssertionError('MCP job was not available')
+
+                initialized = await session.initialize()
+                assert 'workflow_guide' in initialized.instructions
+                guide = await call('workflow_guide')
+                path = next(w['workflow_path'] for w in guide['workflows'] if w['id'] == 'existing-artifact-review')
+                selected = (await call('workflow_guide', workflow_path=path))['workflow']
+                assert {b['source'] for b in selected['input_bindings']} == {'input.artifacts', 'input.criteria'}
+                inputs = {'title': 'MCP 接入约定验收：领取、等待和回报', '_meta': {'purpose': 'test'},
+                          'artifacts': {'left': 2, 'right': 2, 'sum': 4}, 'criteria': '核对给定整数加法'}
+                await call('workflow_start', run_id=rid, workflow_path=path, inputs=inputs,
+                           explicit_start=True, limits={'max_calls': 2})
+                try:
+                    job = await claim()
+                    assert job['node_spec']['instruction'] and job['node_spec']['io_contract']
+                    template = job['report_template']
+                    waiting = {**template, 'report_id': template['report_id'] + ':waiting', 'kind': 'waiting',
+                               'waiting': {'reason': 'MCP 等待续接验收', 'question': '测试预设：继续核对？',
+                                           'resume_condition': '收到预设的测试答复'}}
+                    waiting.pop('outcome')
+                    waiting.pop('output')
+                    assert (await call('workflow_report', run_id=rid, report=waiting))['accepted']
+                    state = await call('workflow_read', run_id=rid)
+                    assert state['steps']['review']['status'] == 'waiting'
+                    await call('workflow_control', run_id=rid, action='reply',
+                               data={'expected_revision': state['revision'], 'node_id': 'review',
+                                     'reply': '仅测试夹具的预设答复：继续'})
+                    resumed = await claim()
+                    assert resumed['execution_id'] == job['execution_id'] and resumed['reply']
+                    template = resumed['report_template']
+                    invalid = await session.call_tool('workflow_report', {'run_id': rid,
+                                                      'report': {**template, 'outcome': 'passed'}})
+                    assert invalid.isError
+                    state = await call('workflow_read', run_id=rid)
+                    assert template['report_id'] not in state['reports']
+                    data = resumed['input']['artifacts']
+                    actual = data['left'] + data['right']
+                    assert actual == data['sum']
+                    report = {**template, 'outcome': 'passed', 'output': {
+                        'verdict': 'passed', 'evidence': [f"整数加法实际核对：{data['left']} + {data['right']} = {actual}"],
+                        'defects': [], 'unverified': [], 'artifacts': data}}
+                    assert (await call('workflow_report', run_id=rid, report=report))['accepted']
+                    assert (await call('workflow_report', run_id=rid, report=report))['accepted']
+                    final = await call('workflow_read', run_id=rid)
+                    assert final['status'] == 'succeeded' and final['steps']['review']['output'] == report['output']
+                    assert len(final['reports']) == 2
+                    folder = ROOT / '.local/evidence'
+                    folder.mkdir(parents=True, exist_ok=True)
+                    (folder / 'mcp-onboarding-latest.json').write_text(json.dumps({
+                        'run_id': rid, 'status': final['status'], 'workflow_path': path,
+                        'evidence': 'Real stdio MCP and backend; deterministic fixture, not a model-compliance test',
+                        'checks': ['initialize instructions', 'workflow discovery and inputs', 'start from another cwd',
+                                   'claim identity', 'wait/reply same execution', 'reject empty output',
+                                   'correct same report id', 'duplicate report deduplication', 'completed output']},
+                        ensure_ascii=False, indent=2), encoding='utf-8')
+                finally:
+                    state = await call('workflow_read', run_id=rid)
+                    if state['status'] not in ('succeeded', 'failed', 'cancelled'):
+                        await call('workflow_control', run_id=rid, action='cancel',
+                                   data={'expected_revision': state['revision']})
+
+    asyncio.run(check())
 
 
 def test_full_methodology_documents_controls_recovery_and_mcp():
@@ -173,7 +259,8 @@ def test_full_methodology_documents_controls_recovery_and_mcp():
                     async with ClientSession(reader, writer) as session:
                         await session.initialize()
                         listed = await session.list_tools()
-                        assert len(listed.tools) == 7
+                        assert {'workflow_guide', 'workflow_start', 'workflow_claim', 'workflow_report',
+                                'workflow_read', 'workflow_control', 'workflow_overview', 'experience_item'} <= {t.name for t in listed.tools}
                         result = await session.call_tool('workflow_read', {'run_id': rid})
                         assert not result.isError
                         data = result.structuredContent or json.loads(next(c.text for c in result.content if c.type == 'text'))

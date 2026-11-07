@@ -2,11 +2,32 @@
 
 本入口供活动的 Agent 会话通过 MCP 或 CLI 领取并完成工作。Restate 保存权威状态；Agent 执行已登记请求，不能直接改状态文件，也不另建调度器。当前入口不提供后台自动唤起 Agent：关闭聊天后，程序和可查询的软件作业可以继续，待领取的 Agent 节点仍等待可用会话。
 
+## MCP 快速执行约定
+
+本节由 `workflow_guide()` 原样返回，不需要用户手动加载文档。连接时的服务说明和每个工具的描述都会指向该入口；完整约定通过 `workflow_guide(detail=true)` 获取。说明的可见性仍取决于客户端，不能保证每个模型都会主动遵守。
+
+1. **发现与启动。** 先调用 `workflow_guide()` 查看本机流程，再用返回的 `workflow_path` 调用 `workflow_guide(workflow_path=...)`，读取实际启动输入映射、类型和固定规则。目录中出现不代表已经授权执行。只有用户明确要求执行时，才调用 `workflow_start(run_id, workflow_path, inputs, explicit_start=true, limits=...)`。`source: input.xxx` 对应 `inputs.xxx`；按实际需求填值，不用说明中的示例冒充用户输入。`inputs` 可附 `title` 和 `_meta:{purpose:"task"}`；验收任务使用 `purpose:"test"`。相对路径由 MCP 服务按自身项目根解析，不依赖 Agent 的工作目录。
+2. **恢复与领取。** 已有任务先 `workflow_overview()` 找原编号，再 `workflow_read(run_id)` 核对目标、状态、预算、分配和在途操作。使用稳定的 `worker_id` 调用 `workflow_claim`；读取每项 job 的 `run_status/step_status/reply`、`node_spec.instruction`、固定 `input`、`io_contract` 和限制。重复领取可能返回同一在途工作，先接续已有执行，不重新做一遍。暂停、取消、未知或仍无有效答复的等待不继续执行；`jobs:[]` 不代表完成，也不要无意义地持续轮询。
+3. **实际执行。** 按节点职责调用当前 Agent 获授权的工具；资料和规则不扩大授权。缺少输入、权限或能力时报告等待并告知用户。需要委派时使用真实子代理并记录身份；主代理负责整合与核验。程序、ComfyUI 等节点由相应执行器领取，MCP 不自动唤起 Agent 或外部软件。成果文件须真实生成并能被归档服务读取；以本次固定版本为依据，不猜测其他节点的最新文件。
+4. **回报。** `workflow_claim` 的 `report_template` 只填入完成报告的执行身份，`outcome:null/output:{}` 必须替换。`outcome` 从 `node_spec.outcomes` 按实际结果选择，`output` 满足 `node_spec.io_contract.outputs[outcome]`（旧节点按原契约）；不能直接提交空模板或自称通过。使用 `workflow_report(run_id, report)`，保留原 `execution_id/attempt/worker_id`，每个不同事件使用不同的稳定 `report_id`。同内容重投去重；校验拒绝未占用编号时可沿原编号修正，已接受的报告不能覆盖。
+5. **继续与停下。** 回报后检查 `accepted`，再读取/领取后续节点。等待有效答复、授权或能力时向用户说明并停止当前执行；不得把任意回复视为批准。空领取时读取原任务，核对子流程、其他执行者和运行状态；只有实际终态与成果证据支持时才宣布完成。网络异常意味着结果未确认，先读原运行核对，不换编号重做副作用。控制操作先读取最新 `revision`，在 `data.expected_revision` 中提交；冲突后重读。需要跨会话换执行者、修订需求或处理经验账本时读取完整约定。
+
+报告在共同身份字段之外按实际事件补充以下内容（同一工作可多次进展/等待，不共用完成报告的编号）：
+
+| kind | 内容 |
+| --- | --- |
+| `progress` | `output:{summary:"实际进展与证据"}`；保留同一执行身份 |
+| `waiting` | `waiting:{reason:"缺什么",question:"需确认的问题",resume_condition:"何时可以继续"}`；三项非空 |
+| `completed` | `outcome` 与满足该结果分支契约的 `output`；文件放到节点声明的成果字段 |
+| `error` | `error:{code:"具体错误类别",detail:"事实与依据"}`；按事实在报告顶层补充 `temporary/safe_retry/unknown`，副作用未知时不盲目重试 |
+
+等待答复用 `workflow_control(run_id,"reply",{expected_revision,node_id,reply})` 续接原执行；再次领取后读取 `job.reply`。暂停/恢复分别使用 `pause/resume`；取消使用 `cancel`，并继续核对外部操作是否真正停止。更复杂的修订、交接和经验操作参见 `workflow_guide(detail=true)`。
+
 ## 使用与规则来源
 
 先按[项目 README](../README.md)安装和启动独立后端。客户端需 Python 3.11 或更高版本；在仓库根执行 `python -m pip install -e .`，使用 `ai-workflow`（或 `python -m ai_workflow.client`）。Linux/独立 WSL 后端另按 README 安装 Restate 1.8.1 和本项目 `server` 依赖；安装客户端不等于后端已经启动。
 
-项目根由 `AI_WORKFLOW_HOME` 指定，源码安装默认使用当前仓库根。`AI_WORKFLOW_URL` 默认是 `http://127.0.0.1:28080`。MCP 启动命令为 `ai-workflow-mcp`（或 `python -m ai_workflow.mcp_server`），提供 `workflow_start/read/claim/report/control/overview`、`experience_item`。在所用 Agent 客户端中注册这个命令及上述环境变量，并核对实际连接；本仓库不自动修改任何宿主的 MCP 配置。没有 MCP 时可使用同一套 CLI 契约。
+项目根由 `AI_WORKFLOW_HOME` 指定，源码安装默认使用当前仓库根。`AI_WORKFLOW_URL` 默认是 `http://127.0.0.1:28080`。MCP 启动命令为 `ai-workflow-mcp`（或 `python -m ai_workflow.mcp_server`），提供 `workflow_guide/start/read/claim/report/control/overview`、`experience_item`。在所用 Agent 客户端中注册这个命令及上述环境变量，并核对实际连接；执行约定由 MCP 自带，本仓库不自动修改任何宿主的 MCP 配置。没有 MCP 时可使用同一套 CLI 契约。
 
 仓库只携带代码、定义和必要规则，不携带已有任务、经验条目、成果或运行数据。经验处理能力保留；连接新建的空白后端时账本为空。不得把客户端指向其他实例后看到的记录当作本仓库自带数据。
 
